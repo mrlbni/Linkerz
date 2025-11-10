@@ -34,6 +34,17 @@ async def root_route_handler(_):
             text='<html> <head> <title>LinkerX CDN</title> <style> body{ margin:0; padding:0; width:100%; height:100%; color:#b0bec5; display:table; font-weight:100; font-family:Lato } .container{ text-align:center; display:table-cell; vertical-align:middle } .content{ text-align:center; display:inline-block } .message{ font-size:80px; margin-bottom:40px } .submessage{ font-size:40px; margin-bottom:40px } .copyright{ font-size:20px; } a{ text-decoration:none; color:#3498db } </style> </head> <body> <div class="container"> <div class="content"> <div class="message">LinkerX CDN</div> <div class="submessage">All Systems Operational since '+utils.get_readable_time(time.time() - StartTime)+'</div> <div class="copyright">Hash Hackers and LiquidX Projects</div> </div> </div> </body> </html>', content_type="text/html"
     )
 
+@routes.get("/favicon.ico", allow_head=True)
+async def favicon_handler(_):
+    """Serve favicon"""
+    # Simple SVG favicon as base64 encoded ICO
+    favicon_svg = '''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+        <rect fill="#667eea" width="100" height="100" rx="15"/>
+        <path fill="#fff" d="M30 25h40v10H30zm0 20h40v10H30zm0 20h30v10H30z"/>
+        <circle fill="#764ba2" cx="75" cy="70" r="8"/>
+    </svg>'''
+    return web.Response(body=favicon_svg, content_type="image/svg+xml")
+
 # route to check file name and size
 @routes.get("/info/{path:.*}", allow_head=True)
 async def info_route_handler(request: web.Request):
