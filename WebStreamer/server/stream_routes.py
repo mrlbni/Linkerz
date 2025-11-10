@@ -78,6 +78,149 @@ async def info_route_handler(request: web.Request):
             text='<html> <head> <title>LinkerX CDN</title> <style> body{ margin:0; padding:0; width:100%; height:100%; color:#b0bec5; display:table; font-weight:100; font-family:Lato } .container{ text-align:center; display:table-cell; vertical-align:middle } .content{ text-align:center; display:inline-block } .message{ font-size:80px; margin-bottom:40px } .submessage{ font-size:40px; margin-bottom:40px } .copyright{ font-size:20px; } a{ text-decoration:none; color:#3498db } </style> </head> <body> <div class="container"> <div class="content"> <div class="message">LinkerX CDN</div> <div class="submessage">'+error_message+'</div> <div class="copyright">Hash Hackers and LiquidX Projects</div> </div> </div> </body> </html>', content_type="text/html"
         )
 
+@routes.get("/download/{unique_file_id}", allow_head=True)
+async def download_by_unique_id(request: web.Request):
+    """Stream media file using unique_file_id from database"""
+    try:
+        unique_file_id = request.match_info['unique_file_id']
+        logging.info(f"Download request for unique_file_id: {unique_file_id}")
+        
+        # Get file information from database
+        db = get_database()
+        file_data = db.get_file_ids(unique_file_id)
+        
+        if not file_data or not file_data['bot_file_ids']:
+            raise web.HTTPNotFound(
+                text='<html> <head> <title>LinkerX CDN</title> <style> body{ margin:0; padding:0; width:100%; height:100%; color:#b0bec5; display:table; font-weight:100; font-family:Lato } .container{ text-align:center; display:table-cell; vertical-align:middle } .content{ text-align:center; display:inline-block } .message{ font-size:80px; margin-bottom:40px } .submessage{ font-size:40px; margin-bottom:40px } .copyright{ font-size:20px; } a{ text-decoration:none; color:#3498db } </style> </head> <body> <div class="container"> <div class="content"> <div class="message">LinkerX CDN</div> <div class="submessage">File Not Found in Database</div> <div class="copyright">Hash Hackers and LiquidX Projects</div> </div> </div> </body> </html>', 
+                content_type="text/html"
+            )
+        
+        # Try to stream using available file_ids
+        last_error = None
+        available_bots = list(file_data['bot_file_ids'].items())
+        
+        # Randomize the order
+        import random
+        random.shuffle(available_bots)
+        
+        for bot_index, file_id in available_bots:
+            try:
+                logging.info(f"Attempting to stream using bot {bot_index + 1}, file_id: {file_id}")
+                
+                # Get the client for this bot
+                if bot_index not in multi_clients:
+                    logging.warning(f"Bot {bot_index} not available in multi_clients")
+                    continue
+                
+                client = multi_clients[bot_index]
+                
+                # Get ByteStreamer for this client
+                if client in class_cache:
+                    tg_connect = class_cache[client]
+                else:
+                    tg_connect = utils.ByteStreamer(client)
+                    class_cache[client] = tg_connect
+                
+                # Get file properties using file_id
+                from pyrogram.file_id import FileId
+                file_id_obj = FileId.decode(file_id)
+                
+                # Set additional properties from database
+                setattr(file_id_obj, "file_size", file_data['file_size'] or 0)
+                setattr(file_id_obj, "mime_type", file_data['mime_type'] or "application/octet-stream")
+                setattr(file_id_obj, "file_name", file_data['file_name'] or "file")
+                
+                file_size = file_id_obj.file_size
+                
+                # Handle range requests
+                range_header = request.headers.get("Range", 0)
+                if range_header:
+                    from_bytes, until_bytes = range_header.replace("bytes=", "").split("-")
+                    from_bytes = int(from_bytes)
+                    until_bytes = int(until_bytes) if until_bytes else file_size - 1
+                else:
+                    from_bytes = request.http_range.start or 0
+                    until_bytes = (request.http_range.stop or file_size) - 1
+                
+                if (until_bytes > file_size) or (from_bytes < 0) or (until_bytes < from_bytes):
+                    return web.Response(
+                        status=416,
+                        body="416: Range not satisfiable",
+                        headers={"Content-Range": f"bytes */{file_size}"},
+                    )
+                
+                chunk_size = 1024 * 1024
+                until_bytes = min(until_bytes, file_size - 1)
+                
+                offset = from_bytes - (from_bytes % chunk_size)
+                first_part_cut = from_bytes - offset
+                last_part_cut = until_bytes % chunk_size + 1
+                
+                req_length = until_bytes - from_bytes + 1
+                part_count = math.ceil(until_bytes / chunk_size) - math.floor(offset / chunk_size)
+                
+                body = tg_connect.yield_file(
+                    file_id_obj, bot_index, offset, first_part_cut, last_part_cut, part_count, chunk_size
+                )
+                
+                mime_type = file_id_obj.mime_type
+                file_name = file_id_obj.file_name
+                disposition = "attachment"
+                
+                if mime_type:
+                    if not file_name:
+                        try:
+                            file_name = f"{secrets.token_hex(2)}.{mime_type.split('/')[1]}"
+                        except (IndexError, AttributeError):
+                            file_name = f"{secrets.token_hex(2)}.unknown"
+                else:
+                    if file_name:
+                        mime_type = mimetypes.guess_type(file_name)[0] or "application/octet-stream"
+                    else:
+                        mime_type = "application/octet-stream"
+                        file_name = f"{secrets.token_hex(2)}.unknown"
+                
+                if "video/" in mime_type or "audio/" in mime_type or "/html" in mime_type:
+                    disposition = "inline"
+                
+                logging.info(f"Successfully streaming file using bot {bot_index + 1}")
+                
+                return web.Response(
+                    status=206 if range_header else 200,
+                    body=body,
+                    headers={
+                        "Content-Type": f"{mime_type}",
+                        "Content-Range": f"bytes {from_bytes}-{until_bytes}/{file_size}",
+                        "Content-Length": str(req_length),
+                        "Content-Disposition": f'{disposition}; filename="{file_name}"',
+                        "Accept-Ranges": "bytes",
+                    },
+                )
+                
+            except Exception as e:
+                last_error = e
+                logging.warning(f"Failed to stream using bot {bot_index + 1}: {e}")
+                continue
+        
+        # If all bots failed, raise the last error
+        error_msg = f"All available bots failed to stream the file. Last error: {last_error}"
+        logging.error(error_msg)
+        raise web.HTTPInternalServerError(
+            text='<html> <head> <title>LinkerX CDN</title> <style> body{ margin:0; padding:0; width:100%; height:100%; color:#b0bec5; display:table; font-weight:100; font-family:Lato } .container{ text-align:center; display:table-cell; vertical-align:middle } .content{ text-align:center; display:inline-block } .message{ font-size:80px; margin-bottom:40px } .submessage{ font-size:40px; margin-bottom:40px } .copyright{ font-size:20px; } a{ text-decoration:none; color:#3498db } </style> </head> <body> <div class="container"> <div class="content"> <div class="message">LinkerX CDN</div> <div class="submessage">Failed to Stream File</div> <div class="copyright">Hash Hackers and LiquidX Projects</div> </div> </div> </body> </html>',
+            content_type="text/html"
+        )
+        
+    except web.HTTPNotFound:
+        raise
+    except web.HTTPInternalServerError:
+        raise
+    except Exception as e:
+        logging.error(f"Error in download_by_unique_id: {e}", exc_info=True)
+        raise web.HTTPInternalServerError(
+            text='<html> <head> <title>LinkerX CDN</title> <style> body{ margin:0; padding:0; width:100%; height:100%; color:#b0bec5; display:table; font-weight:100; font-family:Lato } .container{ text-align:center; display:table-cell; vertical-align:middle } .content{ text-align:center; display:inline-block } .message{ font-size:80px; margin-bottom:40px } .submessage{ font-size:40px; margin-bottom:40px } .copyright{ font-size:20px; } a{ text-decoration:none; color:#3498db } </style> </head> <body> <div class="container"> <div class="content"> <div class="message">LinkerX CDN</div> <div class="submessage">Internal Server Error</div> <div class="copyright">Hash Hackers and LiquidX Projects</div> </div> </div> </body> </html>',
+            content_type="text/html"
+        )
+
 @routes.get("/{path:.*}", allow_head=True)
 async def stream_handler(request: web.Request):
     try:
