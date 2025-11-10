@@ -634,6 +634,35 @@ async def files_list_handler(request: web.Request):
             <div class="footer">
                 Hash Hackers and LiquidX Projects
             </div>
+            
+            <script>
+                async function handleLogout() {{
+                    if (!confirm('Are you sure you want to logout?')) {{
+                        return;
+                    }}
+                    
+                    try {{
+                        const response = await fetch('/api/auth/logout', {{
+                            method: 'POST',
+                            headers: {{
+                                'Content-Type': 'application/json'
+                            }}
+                        }});
+                        
+                        const data = await response.json();
+                        
+                        if (data.success) {{
+                            // Redirect to files page (will show login)
+                            window.location.href = '/files';
+                        }} else {{
+                            alert('Logout failed: ' + (data.message || 'Unknown error'));
+                        }}
+                    }} catch (error) {{
+                        console.error('Logout error:', error);
+                        alert('Logout failed. Please try again.');
+                    }}
+                }}
+            </script>
         </body>
         </html>
         """
