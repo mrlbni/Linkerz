@@ -53,11 +53,21 @@ class Database:
                 file_name TEXT,
                 file_size BIGINT,
                 mime_type TEXT,
+                dc_id INTEGER,
+                channel_id BIGINT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
             """
             cursor.execute(create_table_query)
+            
+            # Add columns if they don't exist (for existing databases)
+            try:
+                cursor.execute("ALTER TABLE media_files ADD COLUMN IF NOT EXISTS dc_id INTEGER;")
+                cursor.execute("ALTER TABLE media_files ADD COLUMN IF NOT EXISTS channel_id BIGINT;")
+            except:
+                pass
+            
             cursor.close()
             logging.info("Table 'media_files' is ready")
         except Exception as e:
