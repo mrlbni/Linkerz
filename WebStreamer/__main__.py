@@ -150,6 +150,15 @@ async def start_services():
         await initialize_clients()
         print("------------------------------ DONE ------------------------------")
         
+        print("-------------------- Initializing Database --------------------")
+        try:
+            db = get_database()
+            logging.info("Database initialized successfully")
+            print("------------------------------ DONE ------------------------------")
+        except Exception as e:
+            logging.error(f"Failed to initialize database: {e}")
+            print("--------------------------- FAILED ------------------------------")
+        
         # Pre-cache BIN_CHANNEL peer to avoid "Peer id invalid" errors
         if Var.BIN_CHANNEL:
             print("------------------ Pre-caching BIN_CHANNEL Peer ------------------")
