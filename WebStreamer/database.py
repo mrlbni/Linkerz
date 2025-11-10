@@ -118,6 +118,7 @@ class Database:
                 WHERE unique_file_id = %s
                 """
                 cursor.execute(update_query, (file_id, unique_file_id))
+                self.conn.commit()
                 logging.info(f"Updated file {unique_file_id} with {bot_column} = {file_id}")
             else:
                 # Insert new record
@@ -127,6 +128,7 @@ class Database:
                 VALUES (%s, %s, %s, %s, %s, %s, %s)
                 """
                 cursor.execute(insert_query, (unique_file_id, file_id, file_name, file_size, mime_type, dc_id, channel_id))
+                self.conn.commit()
                 logging.info(f"Inserted new file {unique_file_id} with {bot_column} = {file_id}")
             
             cursor.close()
