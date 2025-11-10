@@ -177,6 +177,90 @@ class Database:
         logging.info(f"Selected bot {bot_index + 1} for streaming {unique_file_id}")
         return (bot_index, file_id)
     
+    def get_all_files(self, search_query: str = None, limit: int = 100, offset: int = 0) -> List[Dict]:
+        """
+        Get all files from database with optional search
+        
+        Args:
+            search_query: Optional filename search string
+            limit: Maximum number of results to return
+            offset: Number of results to skip
+            
+        Returns:
+            List of dictionaries with file information
+        """
+        try:
+            cursor = self.conn.cursor()
+            
+            if search_query:
+                # Search by filename
+                query = """
+                SELECT unique_file_id, file_name, file_size, mime_type, created_at, updated_at
+                FROM media_files
+                WHERE file_name ILIKE %s
+                ORDER BY created_at DESC
+                LIMIT %s OFFSET %s
+                """
+                cursor.execute(query, (f"%{search_query}%", limit, offset))
+            else:
+                # Get all files
+                query = """
+                SELECT unique_file_id, file_name, file_size, mime_type, created_at, updated_at
+                FROM media_files
+                ORDER BY created_at DESC
+                LIMIT %s OFFSET %s
+                """
+                cursor.execute(query, (limit, offset))
+            
+            results = cursor.fetchall()
+            cursor.close()
+            
+            # Convert to list of dictionaries
+            files = []
+            for row in results:
+                files.append({
+                    'unique_file_id': row[0],
+                    'file_name': row[1],
+                    'file_size': row[2],
+                    'mime_type': row[3],
+                    'created_at': row[4],
+                    'updated_at': row[5]
+                })
+            
+            return files
+            
+        except Exception as e:
+            logging.error(f"Failed to get files: {e}")
+            return []
+    
+    def get_file_count(self, search_query: str = None) -> int:
+        """
+        Get total count of files
+        
+        Args:
+            search_query: Optional filename search string
+            
+        Returns:
+            Total number of files
+        """
+        try:
+            cursor = self.conn.cursor()
+            
+            if search_query:
+                query = "SELECT COUNT(*) FROM media_files WHERE file_name ILIKE %s"
+                cursor.execute(query, (f"%{search_query}%",))
+            else:
+                query = "SELECT COUNT(*) FROM media_files"
+                cursor.execute(query)
+            
+            count = cursor.fetchone()[0]
+            cursor.close()
+            return count
+            
+        except Exception as e:
+            logging.error(f"Failed to get file count: {e}")
+            return 0
+    
     def close(self):
         """Close database connection"""
         if self.conn:
