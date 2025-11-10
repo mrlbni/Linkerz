@@ -120,10 +120,10 @@ class Database:
                 # Insert new record
                 insert_query = f"""
                 INSERT INTO media_files 
-                (unique_file_id, {bot_column}, file_name, file_size, mime_type)
-                VALUES (%s, %s, %s, %s, %s)
+                (unique_file_id, {bot_column}, file_name, file_size, mime_type, dc_id, channel_id)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
                 """
-                cursor.execute(insert_query, (unique_file_id, file_id, file_name, file_size, mime_type))
+                cursor.execute(insert_query, (unique_file_id, file_id, file_name, file_size, mime_type, dc_id, channel_id))
                 logging.info(f"Inserted new file {unique_file_id} with {bot_column} = {file_id}")
             
             cursor.close()
