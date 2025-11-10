@@ -419,6 +419,50 @@ async def files_list_handler(request: web.Request):
                     color: #95a5a6;
                     font-size: 14px;
                 }}
+                .pagination {{
+                    background: white;
+                    padding: 20px 25px;
+                    border-radius: 8px;
+                    box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+                    margin-top: 25px;
+                    display: flex;
+                    justify-content: center;
+                    align-items: center;
+                    gap: 8px;
+                    flex-wrap: wrap;
+                }}
+                .page-btn {{
+                    padding: 8px 14px;
+                    background: white;
+                    color: #667eea;
+                    border: 2px solid #667eea;
+                    border-radius: 6px;
+                    text-decoration: none;
+                    font-size: 14px;
+                    font-weight: 600;
+                    transition: all 0.3s;
+                    min-width: 40px;
+                    text-align: center;
+                }}
+                .page-btn:hover {{
+                    background: #667eea;
+                    color: white;
+                }}
+                .page-btn.active {{
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    color: white;
+                    border-color: #667eea;
+                }}
+                .page-btn.disabled {{
+                    opacity: 0.4;
+                    cursor: not-allowed;
+                    pointer-events: none;
+                }}
+                .page-ellipsis {{
+                    padding: 8px 14px;
+                    color: #7f8c8d;
+                    font-weight: 600;
+                }}
                 @media (max-width: 768px) {{
                     .header h1 {{
                         font-size: 28px;
@@ -431,6 +475,13 @@ async def files_list_handler(request: web.Request):
                     }}
                     table {{
                         min-width: 800px;
+                    }}
+                    .user-info-box {{
+                        flex-direction: column;
+                        align-items: flex-start;
+                    }}
+                    .limits-info {{
+                        width: 100%;
                     }}
                 }}
             </style>
