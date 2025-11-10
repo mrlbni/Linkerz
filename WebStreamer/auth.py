@@ -219,6 +219,7 @@ class AuthSystem:
                 INSERT INTO login_sessions (session_token, telegram_user_id, expires_at)
                 VALUES (%s, %s, %s)
             """, (session_token, telegram_user_id, expires_at))
+            self.conn.commit()
             cursor.close()
             
             logging.info(f"Session created for user {telegram_user_id}")
