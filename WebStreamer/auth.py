@@ -342,6 +342,7 @@ class AuthSystem:
                 logging.info(f"Cleaned up {deleted} expired session records")
                 
         except Exception as e:
+            self.conn.rollback()
             logging.error(f"Failed to cleanup sessions: {e}")
 
 
