@@ -78,6 +78,7 @@ class RateLimiter:
                 SET hour_count = %s, day_count = %s, hour_reset = %s, day_reset = %s
                 WHERE telegram_user_id = %s
             """, (hour_count + 1, day_count + 1, hour_reset, day_reset, telegram_user_id))
+            self.conn.commit()
             
             cursor.close()
             
