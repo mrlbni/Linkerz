@@ -25,6 +25,65 @@ def create_session_safe(client, dc_id, auth_key, test_mode, is_media=True):
     logging.debug(f"Session.__init__ parameters: {param_names}")
     
     # Try different patterns based on parameter names
+    
+    # Check if we need server_address and port (newer Pyrogram versions)
+    if 'server_address' in param_names and 'port' in param_names:
+        try:
+            # Pattern 4: With server_address and port (newest version)
+            logging.debug("Trying pattern 4: with server_address and port")
+            
+            # Get DC configuration from Pyrogram's internal DC map
+            from pyrogram.session.internals import DataCenter
+            dc = DataCenter(dc_id, test_mode)
+            
+            return Session(
+                client,
+                dc_id,
+                dc.address,  # server_address
+                dc.port,     # port
+                auth_key,
+                test_mode,
+                is_media=is_media
+            )
+        except Exception as e:
+            logging.debug(f"Pattern 4 failed: {e}")
+            
+            # Fallback: Try to get DC info from client or use hardcoded values
+            try:
+                logging.debug("Trying pattern 4b: with hardcoded DC addresses")
+                
+                # Hardcoded DC addresses as fallback (Telegram's standard DCs)
+                dc_configs = {
+                    1: ("149.154.175.53", 443),
+                    2: ("149.154.167.51", 443),
+                    3: ("149.154.175.100", 443),
+                    4: ("149.154.167.91", 443),
+                    5: ("91.108.56.128", 443),
+                }
+                
+                if test_mode:
+                    dc_configs = {
+                        1: ("149.154.175.10", 443),
+                        2: ("149.154.167.40", 443),
+                        3: ("149.154.175.117", 443),
+                    }
+                
+                server_address, port = dc_configs.get(dc_id, ("149.154.167.51", 443))
+                logging.info(f"Using DC config: {server_address}:{port} for DC {dc_id}")
+                
+                return Session(
+                    client,
+                    dc_id,
+                    server_address,
+                    port,
+                    auth_key,
+                    test_mode,
+                    is_media=is_media
+                )
+            except Exception as e2:
+                logging.debug(f"Pattern 4b failed: {e2}")
+                pass
+    
     try:
         # Pattern 1: Positional arguments (old style)
         if len(param_names) >= 4:
