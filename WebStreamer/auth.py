@@ -125,6 +125,7 @@ class AuthSystem:
                 INSERT INTO otp_sessions (telegram_user_id, otp, expires_at)
                 VALUES (%s, %s, %s)
             """, (telegram_user_id, otp, expires_at))
+            self.conn.commit()
             cursor.close()
             
             logging.info(f"Generated OTP for user {telegram_user_id}")
