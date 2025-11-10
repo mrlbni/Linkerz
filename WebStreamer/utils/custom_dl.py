@@ -284,10 +284,10 @@ class ByteStreamer:
 
         if media_session is None:
             if file_id.dc_id != await client.storage.dc_id():
-                auth_key = await Auth(
-                    client, file_id.dc_id, await client.storage.test_mode()
-                ).create()
                 test_mode = await client.storage.test_mode()
+                auth_key = await create_auth_safe(
+                    client, file_id.dc_id, test_mode
+                )
                 
                 # Use safe session creation
                 media_session = create_session_safe(
