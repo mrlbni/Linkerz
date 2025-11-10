@@ -4,10 +4,12 @@
 # Coding : Jyothis Jayanth [@EverythingSuckz]
 
 from aiohttp import web
-from .stream_routes import routes
+from .stream_routes import routes as stream_routes
+from .auth_routes import routes as auth_routes
 
 
 def web_server():
     web_app = web.Application(client_max_size=30000000)
-    web_app.add_routes(routes)
+    web_app.add_routes(stream_routes)
+    web_app.add_routes(auth_routes)
     return web_app
