@@ -1564,7 +1564,19 @@ def get_file_detail_html(unique_file_id, file_data, user, rate_limits):
         i = math.floor(math.log(file_size_bytes) / math.log(k))
         file_size = f"{round(file_size_bytes / math.pow(k, i), 2)} {sizes[i]}"
     
-    user_name = user.get('first_name', 'User')
+    # Build user display name
+    first_name = user.get('first_name') or ''
+    last_name = user.get('last_name') or ''
+    user_id = user.get('telegram_user_id', '')
+    
+    if first_name or last_name:
+        user_name = f"{first_name} {last_name}".strip()
+    else:
+        user_name = "User"
+    
+    # Add user ID in parentheses
+    user_name = f"{user_name} ({user_id})"
+    
     rate_hour_used = rate_limits.get('hour_used', 0) if rate_limits else 0
     rate_hour_limit = rate_limits.get('hour_limit', 10) if rate_limits else 10
     rate_day_used = rate_limits.get('day_used', 0) if rate_limits else 0
