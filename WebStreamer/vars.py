@@ -44,3 +44,5 @@ class Var(object):
         URL = "http{}://{}{}/".format(
             "s" if HAS_SSL else "", FQDN, ""
         )
+    # Secret key for download link integrity (generate one if not set)
+    DOWNLOAD_SECRET_KEY = str(environ.get("DOWNLOAD_SECRET_KEY", "change-this-secret-key-in-production"))
