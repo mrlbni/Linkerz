@@ -27,23 +27,17 @@ def format_file_size(bytes_size: int) -> str:
         i += 1
     return f"{size:.2f} {sizes[i]}"
 
-async def store_and_reply_channel_media(client, message: Message):
-    """Store media file and reply with download link"""
+async def store_channel_media(client, message: Message, bot_index: int, should_reply: bool = False):
+    """
+    Store media file in database. Only replies if should_reply=True.
+    
+    Args:
+        client: Pyrogram client
+        message: Message containing media
+        bot_index: Index of the bot (0-10, maps to b_1 to b_11)
+        should_reply: If True, send reply message (only for base bot)
+    """
     try:
-        # Determine which bot received this message
-        bot_index = None
-        client_id = client.me.id if hasattr(client, 'me') else None
-        
-        if client_id:
-            for index, bot_client in multi_clients.items():
-                if bot_client.me.id == client_id:
-                    bot_index = index
-                    break
-        
-        if bot_index is None:
-            bot_index = 0
-            logging.warning(f"Could not identify bot index, using default (0)")
-        
         # Get media information
         media = message.video or message.audio or message.document
         if not media:
@@ -79,37 +73,39 @@ async def store_and_reply_channel_media(client, message: Message):
         )
         
         if success:
-            logging.info(f"Stored media: {file_name} (unique_id: {unique_file_id}, bot: b_{bot_index + 1})")
+            logging.info(f"[Bot {bot_index + 1}] Stored media: {file_name} (unique_id: {unique_file_id}, file_id: {file_id[:20]}...)")
             
-            # Generate file link
-            fqdn = Var.FQDN
-            if not fqdn:
-                fqdn = "your-domain.com"
-            
-            file_link = f"https://{fqdn}/files/{unique_file_id}"
-            
-            # Format file details
-            size_str = format_file_size(file_size)
-            dc_str = f"DC {dc_id}" if dc_id else "Unknown DC"
-            mime_str = mime_type or "Unknown"
-            
-            reply_text = f"📁 **File Stored Successfully**\n\n"
-            reply_text += f"**Name:** {file_name}\n"
-            reply_text += f"**Size:** {size_str}\n"
-            reply_text += f"**Type:** {mime_str}\n"
-            reply_text += f"**Location:** {dc_str}\n\n"
-            reply_text += f"🔗 View and download at: {file_link}"
-            
-            # Create button
-            keyboard = InlineKeyboardMarkup([
-                [InlineKeyboardButton("📥 View File", url=file_link)]
-            ])
-            
-            # Reply to the message
-            await message.reply_text(reply_text, reply_markup=keyboard)
+            # Only reply if this is the base bot
+            if should_reply:
+                # Generate file link
+                fqdn = Var.FQDN
+                if not fqdn:
+                    fqdn = "your-domain.com"
+                
+                file_link = f"https://{fqdn}/files/{unique_file_id}"
+                
+                # Format file details
+                size_str = format_file_size(file_size)
+                dc_str = f"DC {dc_id}" if dc_id else "Unknown DC"
+                mime_str = mime_type or "Unknown"
+                
+                reply_text = f"📁 **File Stored Successfully**\n\n"
+                reply_text += f"**Name:** {file_name}\n"
+                reply_text += f"**Size:** {size_str}\n"
+                reply_text += f"**Type:** {mime_str}\n"
+                reply_text += f"**Location:** {dc_str}\n\n"
+                reply_text += f"🔗 View and download at: {file_link}"
+                
+                # Create button
+                keyboard = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("📥 View File", url=file_link)]
+                ])
+                
+                # Reply to the message
+                await message.reply_text(reply_text, reply_markup=keyboard)
         
     except Exception as e:
-        logging.error(f"Error storing media info: {e}", exc_info=True)
+        logging.error(f"[Bot {bot_index + 1}] Error storing media info: {e}", exc_info=True)
 
 # Handler for private messages - guide user to add bot to channel
 @StreamBot.on_message(filters.private & MEDIA_FILTER, group=1)
@@ -136,8 +132,37 @@ async def handle_private_media(client, message: Message):
     except Exception as e:
         logging.error(f"Error handling private media: {e}", exc_info=True)
 
-# Handler for channel/group messages
+# Handler for channel/group messages on base bot (StreamBot)
 @StreamBot.on_message((filters.channel | filters.group) & MEDIA_FILTER, group=1)
-async def handle_channel_media(client, message: Message):
-    """Handle media files posted in channels/groups where bot is member"""
-    await store_and_reply_channel_media(client, message)
+async def handle_channel_media_base_bot(client, message: Message):
+    """Handle media files on base bot - stores and replies"""
+    await store_channel_media(client, message, bot_index=0, should_reply=True)
+
+def register_multi_client_handlers():
+    """
+    Register handlers on all multi_clients.
+    This should be called after multi_clients are initialized.
+    """
+    for bot_index, bot_client in multi_clients.items():
+        if bot_index == 0:
+            # Skip base bot, already has handler registered
+            continue
+        
+        # Create handler function with captured bot_index
+        async def create_handler(bot_idx):
+            async def handler(client, message: Message):
+                """Handle media files on multi-client - stores silently without reply"""
+                await store_channel_media(client, message, bot_index=bot_idx, should_reply=False)
+            return handler
+        
+        # Register handler on this client
+        handler_func = create_handler(bot_index)
+        bot_client.add_handler(
+            filters.create(
+                lambda _, __, m: (m.chat and (m.chat.type == "channel" or m.chat.type == "supergroup" or m.chat.type == "group")) 
+                and (m.video or m.audio or m.document)
+            ).__call__,
+            group=1
+        )
+        
+        logging.info(f"Registered media handler on bot {bot_index + 1}")
