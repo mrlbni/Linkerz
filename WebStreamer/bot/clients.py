@@ -144,5 +144,10 @@ async def initialize_clients():
     if len(multi_clients) != 1:
         Var.MULTI_CLIENT = True
         print("Multi-Client Mode Enabled")
+        
+        # Register media handlers on all multi clients
+        from WebStreamer.bot.plugins.media_handler import register_multi_client_handlers
+        register_multi_client_handlers()
+        print(f"Registered media handlers on {len(multi_clients) - 1} additional bot(s)")
     else:
         print("No additional clients were initialized, using default client")
