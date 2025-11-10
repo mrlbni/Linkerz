@@ -493,6 +493,30 @@ async def files_list_handler(request: web.Request):
             </div>
             
             <div class="container">
+                <!-- User Info & Limits -->
+                <div class="user-info-box">
+                    <div class="user-details">
+                        <span style="font-size: 24px;">👤</span>
+                        <span class="user-name">{user_name}</span>
+                    </div>
+                    <div class="limits-info">
+                        <div class="limit-item">
+                            <div class="limit-label">Hourly Downloads</div>
+                            <div class="limit-value">{rate_hour_used}/{rate_hour_limit}</div>
+                            <div class="limit-bar">
+                                <div class="limit-bar-fill" style="width: {min(100, (rate_hour_used/rate_hour_limit)*100) if rate_hour_limit > 0 else 0}%;"></div>
+                            </div>
+                        </div>
+                        <div class="limit-item">
+                            <div class="limit-label">Daily Downloads</div>
+                            <div class="limit-value">{rate_day_used}/{rate_day_limit}</div>
+                            <div class="limit-bar">
+                                <div class="limit-bar-fill" style="width: {min(100, (rate_day_used/rate_day_limit)*100) if rate_day_limit > 0 else 0}%;"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
                 <div class="search-box">
                     <form method="get" action="/files">
                         <input type="text" name="search" placeholder="Search files by name..." value="{search_query}" autofocus>
@@ -502,7 +526,7 @@ async def files_list_handler(request: web.Request):
                 </div>
                 
                 <div class="stats">
-                    {f'Found <strong>{total_count}</strong> file(s)' if search_query else f'Total: <strong>{total_count}</strong> file(s)'}
+                    {f'Found <strong>{total_count}</strong> file(s) - Page {page} of {total_pages}' if search_query else f'Total: <strong>{total_count}</strong> file(s) - Page {page} of {total_pages}'}
                 </div>
                 
                 <div class="table-container">
@@ -521,6 +545,9 @@ async def files_list_handler(request: web.Request):
                         </tbody>
                     </table>
                 </div>
+                
+                <!-- Pagination -->
+                {self._generate_pagination_html(page, total_pages, search_query)}
             </div>
             
             <div class="footer">
