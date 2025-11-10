@@ -394,12 +394,248 @@ async def files_list_handler(request: web.Request):
             content_type="text/html"
         )
 
-@routes.get("/download/{unique_file_id}", allow_head=True)
-async def download_by_unique_id(request: web.Request):
-    """Stream media file using unique_file_id from database"""
+@routes.post("/api/generate-download-link")
+async def generate_download_link(request: web.Request):
+    """Generate time-limited download link with integrity check"""
+    try:
+        data = await request.json()
+        unique_file_id = data.get('unique_file_id')
+        
+        if not unique_file_id:
+            return web.json_response({
+                'success': False,
+                'message': 'unique_file_id is required'
+            }, status=400)
+        
+        # Check authentication
+        user = await get_authenticated_user(request)
+        if not user:
+            return web.json_response({
+                'success': False,
+                'message': 'Authentication required'
+            }, status=401)
+        
+        telegram_user_id = user['telegram_user_id']
+        
+        # Check rate limits
+        db = get_database()
+        if db.rate_limiter:
+            allowed, message = db.rate_limiter.check_and_increment(telegram_user_id)
+            if not allowed:
+                return web.json_response({
+                    'success': False,
+                    'message': message
+                }, status=429)
+        
+        # Check if file exists
+        file_data = db.get_file_ids(unique_file_id)
+        if not file_data:
+            return web.json_response({
+                'success': False,
+                'message': 'File not found'
+            }, status=404)
+        
+        # Generate time-limited link (3 hours)
+        import time
+        from WebStreamer.auth import generate_download_signature
+        
+        expires_at = int(time.time()) + (3 * 60 * 60)  # 3 hours from now
+        signature = generate_download_signature(unique_file_id, expires_at, Var.DOWNLOAD_SECRET_KEY)
+        
+        # Build download URL
+        fqdn = Var.FQDN
+        download_url = f"https://{fqdn}/download/{unique_file_id}/{expires_at}/{signature}"
+        
+        return web.json_response({
+            'success': True,
+            'download_url': download_url,
+            'expires_at': expires_at,
+            'valid_for_hours': 3,
+            'rate_limit_message': message if db.rate_limiter else None
+        })
+        
+    except json.JSONDecodeError:
+        return web.json_response({
+            'success': False,
+            'message': 'Invalid JSON'
+        }, status=400)
+    except Exception as e:
+        logging.error(f"Error generating download link: {e}", exc_info=True)
+        return web.json_response({
+            'success': False,
+            'message': 'Internal server error'
+        }, status=500)
+
+@routes.get("/download/{unique_file_id}/{expires_at}/{signature}", allow_head=True)
+async def download_with_signature(request: web.Request):
+    """Stream media file with time-limited signature"""
     try:
         unique_file_id = request.match_info['unique_file_id']
+        expires_at = int(request.match_info['expires_at'])
+        signature = request.match_info['signature']
+        
         logging.info(f"Download request for unique_file_id: {unique_file_id}")
+        
+        # Check expiration
+        import time
+        if time.time() > expires_at:
+            raise web.HTTPForbidden(
+                text='<html><body><h1>Link Expired</h1><p>This download link has expired. Please generate a new one.</p></body></html>',
+                content_type="text/html"
+            )
+        
+        # Verify signature
+        from WebStreamer.auth import verify_download_signature
+        if not verify_download_signature(unique_file_id, expires_at, signature, Var.DOWNLOAD_SECRET_KEY):
+            raise web.HTTPForbidden(
+                text='<html><body><h1>Invalid Link</h1><p>Link integrity check failed.</p></body></html>',
+                content_type="text/html"
+            )
+        
+        # Get file information from database
+        db = get_database()
+        file_data = db.get_file_ids(unique_file_id)
+        
+        if not file_data or not file_data['bot_file_ids']:
+            raise web.HTTPNotFound(
+                text='<html><body><h1>File Not Found</h1><p>The requested file could not be found in the database.</p></body></html>', 
+                content_type="text/html"
+            )
+        
+        # Try to stream using available file_ids (same logic as before)
+        last_error = None
+        available_bots = list(file_data['bot_file_ids'].items())
+        
+        # Randomize the order
+        import random
+        random.shuffle(available_bots)
+        
+        for bot_index, file_id in available_bots:
+            try:
+                logging.info(f"Attempting to stream using bot {bot_index + 1}, file_id: {file_id}")
+                
+                # Get the client for this bot
+                if bot_index not in multi_clients:
+                    logging.warning(f"Bot {bot_index} not available in multi_clients")
+                    continue
+                
+                client = multi_clients[bot_index]
+                
+                # Get ByteStreamer for this client
+                if client in class_cache:
+                    tg_connect = class_cache[client]
+                else:
+                    tg_connect = utils.ByteStreamer(client)
+                    class_cache[client] = tg_connect
+                
+                # Get file properties using file_id
+                from pyrogram.file_id import FileId
+                file_id_obj = FileId.decode(file_id)
+                
+                # Set additional properties from database
+                setattr(file_id_obj, "file_size", file_data['file_size'] or 0)
+                setattr(file_id_obj, "mime_type", file_data['mime_type'] or "application/octet-stream")
+                setattr(file_id_obj, "file_name", file_data['file_name'] or "file")
+                
+                file_size = file_id_obj.file_size
+                
+                # Handle range requests
+                range_header = request.headers.get("Range", 0)
+                if range_header:
+                    from_bytes, until_bytes = range_header.replace("bytes=", "").split("-")
+                    from_bytes = int(from_bytes)
+                    until_bytes = int(until_bytes) if until_bytes else file_size - 1
+                else:
+                    from_bytes = request.http_range.start or 0
+                    until_bytes = (request.http_range.stop or file_size) - 1
+                
+                if (until_bytes > file_size) or (from_bytes < 0) or (until_bytes < from_bytes):
+                    return web.Response(
+                        status=416,
+                        body="416: Range not satisfiable",
+                        headers={"Content-Range": f"bytes */{file_size}"},
+                    )
+                
+                chunk_size = 1024 * 1024
+                until_bytes = min(until_bytes, file_size - 1)
+                
+                offset = from_bytes - (from_bytes % chunk_size)
+                first_part_cut = from_bytes - offset
+                last_part_cut = until_bytes % chunk_size + 1
+                
+                req_length = until_bytes - from_bytes + 1
+                part_count = math.ceil(until_bytes / chunk_size) - math.floor(offset / chunk_size)
+                
+                body = tg_connect.yield_file(
+                    file_id_obj, bot_index, offset, first_part_cut, last_part_cut, part_count, chunk_size
+                )
+                
+                mime_type = file_id_obj.mime_type
+                file_name = file_id_obj.file_name
+                disposition = "attachment"
+                
+                if mime_type:
+                    if not file_name:
+                        try:
+                            file_name = f"{secrets.token_hex(2)}.{mime_type.split('/')[1]}"
+                        except (IndexError, AttributeError):
+                            file_name = f"{secrets.token_hex(2)}.unknown"
+                else:
+                    if file_name:
+                        mime_type = mimetypes.guess_type(file_name)[0] or "application/octet-stream"
+                    else:
+                        mime_type = "application/octet-stream"
+                        file_name = f"{secrets.token_hex(2)}.unknown"
+                
+                if "video/" in mime_type or "audio/" in mime_type or "/html" in mime_type:
+                    disposition = "inline"
+                
+                logging.info(f"Successfully streaming file using bot {bot_index + 1}")
+                
+                return web.Response(
+                    status=206 if range_header else 200,
+                    body=body,
+                    headers={
+                        "Content-Type": f"{mime_type}",
+                        "Content-Range": f"bytes {from_bytes}-{until_bytes}/{file_size}",
+                        "Content-Length": str(req_length),
+                        "Content-Disposition": f'{disposition}; filename="{file_name}"',
+                        "Accept-Ranges": "bytes",
+                    },
+                )
+                
+            except Exception as e:
+                last_error = e
+                logging.warning(f"Failed to stream using bot {bot_index + 1}: {e}")
+                continue
+        
+        # If all bots failed, raise the last error
+        error_msg = f"All available bots failed to stream the file. Last error: {last_error}"
+        logging.error(error_msg)
+        raise web.HTTPInternalServerError(
+            text='<html><body><h1>Failed to Stream File</h1><p>Unable to stream the file from Telegram servers.</p></body></html>',
+            content_type="text/html"
+        )
+        
+    except web.HTTPNotFound:
+        raise
+    except web.HTTPForbidden:
+        raise
+    except web.HTTPInternalServerError:
+        raise
+    except Exception as e:
+        logging.error(f"Error in download_with_signature: {e}", exc_info=True)
+        raise web.HTTPInternalServerError(
+            text='<html><body><h1>Internal Server Error</h1></body></html>',
+            content_type="text/html"
+        )
+
+@routes.get("/download/{unique_file_id}", allow_head=True)
+async def download_by_unique_id_redirect(request: web.Request):
+    """Redirect old download links to file detail page"""
+    try:
+        unique_file_id = request.match_info['unique_file_id']
+        logging.info(f"Old download link accessed for unique_file_id: {unique_file_id}, redirecting to file page")
         
         # Get file information from database
         db = get_database()
