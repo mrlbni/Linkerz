@@ -78,6 +78,256 @@ async def info_route_handler(request: web.Request):
             text='<html> <head> <title>LinkerX CDN</title> <style> body{ margin:0; padding:0; width:100%; height:100%; color:#b0bec5; display:table; font-weight:100; font-family:Lato } .container{ text-align:center; display:table-cell; vertical-align:middle } .content{ text-align:center; display:inline-block } .message{ font-size:80px; margin-bottom:40px } .submessage{ font-size:40px; margin-bottom:40px } .copyright{ font-size:20px; } a{ text-decoration:none; color:#3498db } </style> </head> <body> <div class="container"> <div class="content"> <div class="message">LinkerX CDN</div> <div class="submessage">'+error_message+'</div> <div class="copyright">Hash Hackers and LiquidX Projects</div> </div> </div> </body> </html>', content_type="text/html"
         )
 
+@routes.get("/files", allow_head=True)
+async def files_list_handler(request: web.Request):
+    """Display all files from database with search functionality"""
+    try:
+        # Get search query parameter
+        search_query = request.query.get('search', '').strip()
+        
+        # Get database instance
+        db = get_database()
+        
+        # Get files from database
+        files = db.get_all_files(search_query=search_query if search_query else None, limit=1000)
+        total_count = db.get_file_count(search_query=search_query if search_query else None)
+        
+        # Build HTML table rows
+        rows_html = ""
+        if files:
+            for file in files:
+                file_name = file['file_name'] or 'Unknown'
+                file_size = await formatFileSize(file['file_size']) if file['file_size'] else '0B'
+                mime_type = file['mime_type'] or 'Unknown'
+                unique_id = file['unique_file_id']
+                
+                rows_html += f"""
+                <tr>
+                    <td style="padding: 12px; border-bottom: 1px solid #ecf0f1; word-break: break-all; font-size: 12px; font-family: monospace;">{unique_id}</td>
+                    <td style="padding: 12px; border-bottom: 1px solid #ecf0f1;">{file_name}</td>
+                    <td style="padding: 12px; border-bottom: 1px solid #ecf0f1; text-align: right;">{file_size}</td>
+                    <td style="padding: 12px; border-bottom: 1px solid #ecf0f1;">{mime_type}</td>
+                    <td style="padding: 12px; border-bottom: 1px solid #ecf0f1; text-align: center;">
+                        <a href="/download/{unique_id}" style="background-color: #3498db; color: white; padding: 8px 16px; text-decoration: none; border-radius: 4px; display: inline-block; font-size: 14px;">Download</a>
+                    </td>
+                </tr>
+                """
+        else:
+            rows_html = """
+            <tr>
+                <td colspan="5" style="padding: 40px; text-align: center; color: #95a5a6; font-size: 18px;">
+                    No files found
+                </td>
+            </tr>
+            """
+        
+        # Build complete HTML page
+        html_content = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>LinkerX CDN - Files</title>
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <style>
+                body {{
+                    margin: 0;
+                    padding: 0;
+                    font-family: 'Lato', Arial, sans-serif;
+                    background-color: #f5f6fa;
+                    color: #2c3e50;
+                }}
+                .header {{
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    color: white;
+                    padding: 30px 20px;
+                    text-align: center;
+                    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+                }}
+                .header h1 {{
+                    margin: 0;
+                    font-size: 36px;
+                    font-weight: 300;
+                }}
+                .header p {{
+                    margin: 10px 0 0 0;
+                    font-size: 16px;
+                    opacity: 0.9;
+                }}
+                .container {{
+                    max-width: 1400px;
+                    margin: 30px auto;
+                    padding: 0 20px;
+                }}
+                .search-box {{
+                    background: white;
+                    padding: 25px;
+                    border-radius: 8px;
+                    box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+                    margin-bottom: 25px;
+                }}
+                .search-box form {{
+                    display: flex;
+                    gap: 10px;
+                }}
+                .search-box input[type="text"] {{
+                    flex: 1;
+                    padding: 12px 15px;
+                    border: 2px solid #e0e0e0;
+                    border-radius: 6px;
+                    font-size: 16px;
+                    transition: border-color 0.3s;
+                }}
+                .search-box input[type="text"]:focus {{
+                    outline: none;
+                    border-color: #3498db;
+                }}
+                .search-box button {{
+                    padding: 12px 30px;
+                    background-color: #3498db;
+                    color: white;
+                    border: none;
+                    border-radius: 6px;
+                    font-size: 16px;
+                    cursor: pointer;
+                    transition: background-color 0.3s;
+                }}
+                .search-box button:hover {{
+                    background-color: #2980b9;
+                }}
+                .clear-search {{
+                    padding: 12px 20px;
+                    background-color: #95a5a6;
+                    color: white;
+                    border: none;
+                    border-radius: 6px;
+                    font-size: 16px;
+                    cursor: pointer;
+                    transition: background-color 0.3s;
+                    text-decoration: none;
+                    display: inline-block;
+                }}
+                .clear-search:hover {{
+                    background-color: #7f8c8d;
+                }}
+                .stats {{
+                    background: white;
+                    padding: 15px 25px;
+                    border-radius: 8px;
+                    box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+                    margin-bottom: 25px;
+                    text-align: center;
+                    font-size: 16px;
+                    color: #7f8c8d;
+                }}
+                .table-container {{
+                    background: white;
+                    border-radius: 8px;
+                    box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+                    overflow: hidden;
+                }}
+                table {{
+                    width: 100%;
+                    border-collapse: collapse;
+                }}
+                thead {{
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    color: white;
+                }}
+                th {{
+                    padding: 15px 12px;
+                    text-align: left;
+                    font-weight: 500;
+                    font-size: 14px;
+                    text-transform: uppercase;
+                    letter-spacing: 0.5px;
+                }}
+                th:nth-child(3), th:nth-child(5) {{
+                    text-align: center;
+                }}
+                tbody tr:hover {{
+                    background-color: #f8f9fa;
+                }}
+                a {{
+                    transition: opacity 0.3s;
+                }}
+                a:hover {{
+                    opacity: 0.8;
+                }}
+                .footer {{
+                    text-align: center;
+                    padding: 30px 20px;
+                    color: #95a5a6;
+                    font-size: 14px;
+                }}
+                @media (max-width: 768px) {{
+                    .header h1 {{
+                        font-size: 28px;
+                    }}
+                    .search-box form {{
+                        flex-direction: column;
+                    }}
+                    .table-container {{
+                        overflow-x: auto;
+                    }}
+                    table {{
+                        min-width: 800px;
+                    }}
+                }}
+            </style>
+        </head>
+        <body>
+            <div class="header">
+                <h1>LinkerX CDN</h1>
+                <p>File Browser & Download Center</p>
+            </div>
+            
+            <div class="container">
+                <div class="search-box">
+                    <form method="get" action="/files">
+                        <input type="text" name="search" placeholder="Search files by name..." value="{search_query}" autofocus>
+                        <button type="submit">Search</button>
+                        {f'<a href="/files" class="clear-search">Clear</a>' if search_query else ''}
+                    </form>
+                </div>
+                
+                <div class="stats">
+                    {f'Found <strong>{total_count}</strong> file(s)' if search_query else f'Total: <strong>{total_count}</strong> file(s)'}
+                </div>
+                
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Unique ID</th>
+                                <th>File Name</th>
+                                <th style="text-align: right;">Size</th>
+                                <th>MIME Type</th>
+                                <th style="text-align: center;">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {rows_html}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            
+            <div class="footer">
+                Hash Hackers and LiquidX Projects
+            </div>
+        </body>
+        </html>
+        """
+        
+        return web.Response(text=html_content, content_type="text/html")
+        
+    except Exception as e:
+        logging.error(f"Error in files_list_handler: {e}", exc_info=True)
+        return web.Response(
+            text=f'<html> <head> <title>LinkerX CDN</title> <style> body{{ margin:0; padding:0; width:100%; height:100%; color:#b0bec5; display:table; font-weight:100; font-family:Lato }} .container{{ text-align:center; display:table-cell; vertical-align:middle }} .content{{ text-align:center; display:inline-block }} .message{{ font-size:80px; margin-bottom:40px }} .submessage{{ font-size:40px; margin-bottom:40px }} .copyright{{ font-size:20px; }} a{{ text-decoration:none; color:#3498db }} </style> </head> <body> <div class="container"> <div class="content"> <div class="message">LinkerX CDN</div> <div class="submessage">Error loading files</div> <div class="copyright">Hash Hackers and LiquidX Projects</div> </div> </div> </body> </html>',
+            content_type="text/html"
+        )
+
 @routes.get("/download/{unique_file_id}", allow_head=True)
 async def download_by_unique_id(request: web.Request):
     """Stream media file using unique_file_id from database"""
