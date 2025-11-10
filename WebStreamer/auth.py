@@ -274,6 +274,7 @@ class AuthSystem:
             return telegram_user_id
             
         except Exception as e:
+            self.conn.rollback()
             logging.error(f"Failed to validate session: {e}")
             return None
     
