@@ -323,6 +323,7 @@ class AuthSystem:
                 logging.info(f"Cleaned up {deleted} expired OTP records")
                 
         except Exception as e:
+            self.conn.rollback()
             logging.error(f"Failed to cleanup OTPs: {e}")
     
     def cleanup_expired_sessions(self):
