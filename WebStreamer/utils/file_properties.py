@@ -101,24 +101,10 @@ async def get_file_ids(client: Client, chat_id: int, message_id: int) -> Optiona
                     logging.info(f"Successfully fetched message {message_id} from chat {chat_id} after peer resolution")
                 except Exception as chat_error:
                     logging.warning(f"Failed to get chat info for {chat_id}: {chat_error}")
-                    try:
-                        # Alternative: Try to send a raw API call to fetch dialogs/updates
-                        logging.info(f"Attempting to fetch dialogs to cache peer for {chat_id}")
-                        await client.invoke(raw.functions.messages.GetDialogs(
-                            offset_date=0,
-                            offset_id=0,
-                            offset_peer=raw.types.InputPeerEmpty(),
-                            limit=100,
-                            hash=0
-                        ))
-                        logging.info(f"Fetched dialogs, retrying message fetch for {chat_id}")
-                        # Retry getting the message
-                        message = await client.get_messages(chat_id, message_id)
-                        logging.info(f"Successfully fetched message {message_id} after fetching dialogs")
-                    except Exception as dialog_error:
-                        logging.error(f"Failed to fetch dialogs: {dialog_error}")
-                        logging.error(f"Unable to resolve peer for chat {chat_id}.")
-                        raise
+                    # For bots, GetDialogs is not available. If raw API and get_chat both failed,
+                    # we cannot resolve the peer. Log and raise the error.
+                    logging.error(f"Unable to resolve peer for chat {chat_id}. All methods exhausted.")
+                    raise
         else:
             # Re-raise if it's a different error
             raise
