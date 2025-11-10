@@ -193,7 +193,7 @@ def register_multi_client_handlers():
                                             url=f"https://t.me/{bot_username}?startchannel=true")]
                     ])
                     
-                    await message.reply_text(reply_text, reply_markup=keyboard)
+                    await message.reply_text(reply_text, reply_markup=keyboard, quote=True)
                     
                 except Exception as e:
                     logging.error(f"[Bot {bot_idx + 1}] Error handling private media: {e}", exc_info=True)
