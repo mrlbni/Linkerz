@@ -69,15 +69,29 @@ class ByteStreamer:
 
         if media_session is None:
             if file_id.dc_id != await client.storage.dc_id():
-                media_session = Session(
-                    client,
-                    file_id.dc_id,
-                    await Auth(
-                        client, file_id.dc_id, await client.storage.test_mode()
-                    ).create(),
-                    await client.storage.test_mode(),
-                    is_media=True,
-                )
+                auth_key = await Auth(
+                    client, file_id.dc_id, await client.storage.test_mode()
+                ).create()
+                test_mode = await client.storage.test_mode()
+                
+                try:
+                    # Try the old signature (positional args)
+                    media_session = Session(
+                        client,
+                        file_id.dc_id,
+                        auth_key,
+                        test_mode,
+                        is_media=True,
+                    )
+                except TypeError:
+                    # If that fails, try with keyword arguments
+                    media_session = Session(
+                        client=client,
+                        dc_id=file_id.dc_id,
+                        auth_key=auth_key,
+                        test_mode=test_mode,
+                        is_media=True,
+                    )
                 await media_session.start()
 
                 for _ in range(6):
