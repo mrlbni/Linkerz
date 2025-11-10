@@ -56,6 +56,25 @@ def fix_schema():
             """)
             logging.info("✓ Column renamed successfully")
             
+            # Clean up orphaned records before adding foreign key
+            logging.info("Cleaning up orphaned records in login_sessions...")
+            cursor.execute("""
+                DELETE FROM login_sessions 
+                WHERE telegram_user_id NOT IN (SELECT telegram_user_id FROM users);
+            """)
+            deleted_sessions = cursor.rowcount
+            if deleted_sessions > 0:
+                logging.info(f"  Deleted {deleted_sessions} orphaned session records")
+            
+            # Clean up orphaned records in otp_sessions
+            cursor.execute("""
+                DELETE FROM otp_sessions 
+                WHERE telegram_user_id NOT IN (SELECT telegram_user_id FROM users);
+            """)
+            deleted_otps = cursor.rowcount
+            if deleted_otps > 0:
+                logging.info(f"  Deleted {deleted_otps} orphaned OTP records")
+            
             # Recreate the foreign key constraint
             logging.info("Adding foreign key constraint...")
             cursor.execute("""
