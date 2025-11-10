@@ -212,3 +212,75 @@ def register_multi_client_handlers():
         )
         
         logging.info(f"Registered private media handler on bot {bot_index + 1} (b_{bot_index + 1})")
+        
+        # ===== Start Command Handler =====
+        # Create handler for /start command
+        def make_start_handler(bot_idx):
+            async def handler(client, message: Message):
+                """Handle /start command on multi-client"""
+                try:
+                    from WebStreamer.database import get_database
+                    from WebStreamer.vars import Var
+                    
+                    user = message.from_user
+                    if not user:
+                        await message.reply_text("Unable to identify user.")
+                        return
+                    
+                    # Get user details
+                    telegram_user_id = user.id
+                    first_name = user.first_name or "N/A"
+                    last_name = user.last_name or ""
+                    username = f"@{user.username}" if user.username else "No username"
+                    full_name = f"{first_name} {last_name}".strip()
+                    
+                    # Create or update user in database
+                    db = get_database()
+                    if db.auth:
+                        db.auth.create_user(
+                            telegram_user_id=telegram_user_id,
+                            first_name=first_name,
+                            last_name=last_name,
+                            username=user.username
+                        )
+                    
+                    # Build response
+                    reply_text = f"👋 **Welcome, {full_name}!**\n\n"
+                    reply_text += "📋 **Your Details:**\n"
+                    reply_text += f"🆔 Telegram ID: `{telegram_user_id}`\n"
+                    reply_text += f"👤 Username: {username}\n"
+                    reply_text += f"📝 Name: {full_name}\n\n"
+                    reply_text += "ℹ️ **How to use:**\n"
+                    reply_text += "1️⃣ Add me to your channel (where you're owner/admin)\n"
+                    reply_text += "2️⃣ Post files in the channel\n"
+                    reply_text += "3️⃣ I'll reply with a secure download link\n"
+                    reply_text += "4️⃣ Access files through the web interface"
+                    
+                    bot_username = (await client.get_me()).username
+                    
+                    keyboard = InlineKeyboardMarkup([
+                        [InlineKeyboardButton("➕ Add Bot to Channel", 
+                                            url=f"https://t.me/{bot_username}?startchannel=true")],
+                        [InlineKeyboardButton("🌐 Browse Files", url=f"https://{Var.FQDN}/files" if Var.FQDN else "https://your-domain.com/files")]
+                    ])
+                    
+                    await message.reply_text(reply_text, reply_markup=keyboard)
+                    
+                except Exception as e:
+                    logging.error(f"[Bot {bot_idx + 1}] Error in start command: {e}", exc_info=True)
+                    await message.reply_text("An error occurred. Please try again.")
+            return handler
+        
+        # Create start handler
+        start_handler_func = make_start_handler(bot_index)
+        
+        # Register start command handler
+        bot_client.add_handler(
+            MessageHandler(
+                start_handler_func,
+                filters=filters.command(["start"]) & filters.private
+            ),
+            group=0
+        )
+        
+        logging.info(f"Registered start command handler on bot {bot_index + 1} (b_{bot_index + 1})")
