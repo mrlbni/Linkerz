@@ -65,7 +65,35 @@ Created test scripts to verify the fix:
 - `fix_schema.py` - Schema migration script
 - `cleanup_orphans.py` - Orphaned records cleanup script
 
-## Status
-✅ **Database schema is now fixed and working correctly**
+## Additional Fixes (Update 2)
 
-The application should now start without the "column 'telegram_user_id' does not exist" error.
+### Missing Column Issue
+**Problem:** `column "last_login" of relation "users" does not exist`
+
+**Solution:**
+- Added missing `last_login TIMESTAMP` column to users table
+- This column is used by the authentication system to track user login times
+
+### Transaction Handling
+**Problem:** `current transaction is aborted, commands ignored until end of transaction block`
+
+**Solution:**
+- Added proper rollback handling in all database operations
+- Modified all error handlers in:
+  - `auth.py` - All methods now call `self.conn.rollback()` on exception
+  - `database.py` - Added rollback on table creation and file storage errors
+  - `rate_limiter.py` - Added rollback on rate limit check errors
+
+This ensures that when an error occurs, the transaction is properly rolled back and the connection remains usable for subsequent operations.
+
+## Status
+✅ **Database schema is now fully fixed and working correctly**
+
+All issues resolved:
+- ✅ Column renamed: users.id → users.telegram_user_id
+- ✅ Foreign key constraint added and working
+- ✅ Missing last_login column added
+- ✅ Transaction rollback handling implemented
+- ✅ Orphaned records cleaned up
+
+The application should now start and run without any database errors.
