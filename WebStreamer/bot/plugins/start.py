@@ -100,6 +100,14 @@ async def verify_otp(_, m: Message):
         verified = db.auth.verify_otp(telegram_user_id, otp)
         
         if verified:
+            # Create or update user in database (required for foreign key constraint)
+            db.auth.create_user(
+                telegram_user_id=telegram_user_id,
+                first_name=user.first_name,
+                last_name=user.last_name,
+                username=user.username
+            )
+            
             # Create session
             session_token = db.auth.create_session(telegram_user_id)
             
