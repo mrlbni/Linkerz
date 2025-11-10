@@ -1509,6 +1509,21 @@ def get_login_page_html():
             document.getElementById('otp').addEventListener('keypress', function(e) {
                 if (e.key === 'Enter') verifyOTP();
             });
+
+            // Fetch bot username and update links on page load
+            fetch('/api/bot-info')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success && data.bot_username) {
+                        const botLink = `https://telegram.dog/${data.bot_username}?start`;
+                        const helpText = document.querySelector('.help-text');
+                        if (helpText) {
+                            helpText.innerHTML = `Don't know your Telegram ID?<br>
+                                <a href="${botLink}" target="_blank" style="color: #667eea; text-decoration: underline;">Click here to start our bot</a> and send /start to get your ID`;
+                        }
+                    }
+                })
+                .catch(err => console.error('Failed to fetch bot info:', err));
         </script>
     </body>
     </html>
