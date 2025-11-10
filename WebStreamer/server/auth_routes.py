@@ -42,12 +42,16 @@ async def request_otp(request: web.Request):
         # The bot will send the OTP to the user
         from WebStreamer.bot import StreamBot
         try:
+            # Get bot username for the link
+            bot_me = await StreamBot.get_me()
+            bot_username = bot_me.username
+            bot_link = f"https://telegram.dog/{bot_username}?start"
+            
             await StreamBot.send_message(
                 chat_id=telegram_user_id,
                 text=f"🔐 **Your OTP Code**\n\n"
                      f"Code: `{otp}`\n\n"
-                     f"This code is valid for 10 minutes.\n"
-                     f"To verify, send:\n`/verify {otp}`\n\n"
+                     f"This code is valid for 10 minutes.\n\n"
                      f"⚠️ Never share this code with anyone!"
             )
             
@@ -57,7 +61,27 @@ async def request_otp(request: web.Request):
                 'telegram_user_id': telegram_user_id
             })
         except Exception as e:
+            error_msg = str(e)
             logging.error(f"Failed to send OTP via bot: {e}")
+            
+            # Check if it's a PEER_ID_INVALID error
+            if "PEER_ID_INVALID" in error_msg or "400" in error_msg:
+                # Get bot username for the link
+                try:
+                    bot_me = await StreamBot.get_me()
+                    bot_username = bot_me.username
+                    bot_link = f"https://telegram.dog/{bot_username}?start"
+                except:
+                    bot_link = "your bot"
+                
+                return web.json_response({
+                    'success': False,
+                    'message': f'Please start the bot first. Click here to start: {bot_link}',
+                    'error_type': 'peer_not_found',
+                    'bot_link': bot_link,
+                    'telegram_user_id': telegram_user_id
+                }, status=400)
+            
             # Fallback: return OTP in response (for development/testing)
             return web.json_response({
                 'success': True,
