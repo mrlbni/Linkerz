@@ -17,6 +17,7 @@ from WebStreamer.server.exceptions import FIleNotFound, InvalidHash
 from WebStreamer import Var, utils, StartTime, __version__, StreamBot
 from concurrent.futures import ThreadPoolExecutor
 import urllib.parse
+from WebStreamer.database import get_database
 
 THREADPOOL = ThreadPoolExecutor(max_workers=1000)
 
