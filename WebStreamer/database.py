@@ -75,7 +75,8 @@ class Database:
             raise
     
     def store_file(self, unique_file_id: str, bot_index: int, file_id: str, 
-                   file_name: str = None, file_size: int = None, mime_type: str = None):
+                   file_name: str = None, file_size: int = None, mime_type: str = None,
+                   dc_id: int = None, channel_id: int = None):
         """
         Store or update file information
         
@@ -86,6 +87,8 @@ class Database:
             file_name: Name of the file
             file_size: Size of the file in bytes
             mime_type: MIME type of the file
+            dc_id: Telegram DC ID where file is stored
+            channel_id: Channel ID where file was posted
         """
         try:
             cursor = self.conn.cursor()
