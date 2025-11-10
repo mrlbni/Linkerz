@@ -50,9 +50,7 @@ async def start(_, m: Message):
         reply_text += "1️⃣ Add me to your channel (where you're owner/admin)\n"
         reply_text += "2️⃣ Post files in the channel\n"
         reply_text += "3️⃣ I'll reply with a secure download link\n"
-        reply_text += "4️⃣ Access files through the web interface\n\n"
-        reply_text += "🔐 When you receive an OTP code, reply with:\n"
-        reply_text += "`/verify <6-digit-code>`"
+        reply_text += "4️⃣ Access files through the web interface"
         
         bot_username = (await StreamBot.get_me()).username
         
