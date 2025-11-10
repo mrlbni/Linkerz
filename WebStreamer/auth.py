@@ -299,8 +299,8 @@ class AuthSystem:
                 'first_name': result[1],
                 'last_name': result[2],
                 'username': result[3],
-                'created_at': result[4],
-                'last_login': result[5]
+                'created_at': result[4].isoformat() if result[4] else None,
+                'last_login': result[5].isoformat() if result[5] else None
             }
             
         except Exception as e:
