@@ -637,13 +637,33 @@ async def download_by_unique_id_redirect(request: web.Request):
         unique_file_id = request.match_info['unique_file_id']
         logging.info(f"Old download link accessed for unique_file_id: {unique_file_id}, redirecting to file page")
         
+        # Redirect to file detail page
+        raise web.HTTPFound(f"/files/{unique_file_id}")
+        
+    except web.HTTPFound:
+        raise
+    except Exception as e:
+        logging.error(f"Error in download redirect: {e}", exc_info=True)
+        raise web.HTTPNotFound(
+            text='<html><body><h1>File Not Found</h1></body></html>',
+            content_type="text/html"
+        )
+
+# Keep old download endpoint for backwards compatibility but it will be deprecated
+@routes.get("/download_old/{unique_file_id}", allow_head=True)
+async def download_by_unique_id_old(request: web.Request):
+    """Stream media file using unique_file_id from database (deprecated - for backwards compatibility)"""
+    try:
+        unique_file_id = request.match_info['unique_file_id']
+        logging.info(f"Download request for unique_file_id: {unique_file_id}")
+        
         # Get file information from database
         db = get_database()
         file_data = db.get_file_ids(unique_file_id)
         
         if not file_data or not file_data['bot_file_ids']:
             raise web.HTTPNotFound(
-                text='<html> <head> <title>LinkerX CDN</title> <style> body{ margin:0; padding:0; width:100%; height:100%; color:#b0bec5; display:table; font-weight:100; font-family:Lato } .container{ text-align:center; display:table-cell; vertical-align:middle } .content{ text-align:center; display:inline-block } .message{ font-size:80px; margin-bottom:40px } .submessage{ font-size:40px; margin-bottom:40px } .copyright{ font-size:20px; } a{ text-decoration:none; color:#3498db } </style> </head> <body> <div class="container"> <div class="content"> <div class="message">LinkerX CDN</div> <div class="submessage">File Not Found in Database</div> <div class="copyright">Hash Hackers and LiquidX Projects</div> </div> </div> </body> </html>', 
+                text='<html><body><h1>File Not Found</h1></body></html>', 
                 content_type="text/html"
             )
         
