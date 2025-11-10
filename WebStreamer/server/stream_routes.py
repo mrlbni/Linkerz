@@ -547,7 +547,7 @@ async def files_list_handler(request: web.Request):
                 </div>
                 
                 <!-- Pagination -->
-                {self._generate_pagination_html(page, total_pages, search_query)}
+                {generate_pagination_html(page, total_pages, search_query)}
             </div>
             
             <div class="footer">
