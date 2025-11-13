@@ -30,7 +30,7 @@ def format_file_size(bytes_size: int) -> str:
 
 async def store_channel_media(client, message: Message, bot_index: int, should_reply: bool = False):
     """
-    Store media file in database. Only replies if should_reply=True.
+    Store media file in database and R2. Only replies if should_reply=True.
     
     Args:
         client: Pyrogram client
@@ -57,24 +57,124 @@ async def store_channel_media(client, message: Message, bot_index: int, should_r
         except:
             dc_id = None
         
-        # Get channel ID
+        # Get channel ID and message ID
         channel_id = message.chat.id if message.chat else None
+        message_id = message.id
         
-        # Store in database
-        db = get_database()
-        success = db.store_file(
-            unique_file_id=unique_file_id,
-            bot_index=bot_index,
-            file_id=file_id,
-            file_name=file_name,
-            file_size=file_size,
-            mime_type=mime_type,
-            dc_id=dc_id,
-            channel_id=channel_id
-        )
+        # Get caption
+        caption = message.caption or file_name
         
-        if success:
-            logging.info(f"[Bot {bot_index + 1}] Stored media: {file_name} (unique_id: {unique_file_id}, file_id: {file_id[:20]}...)")
+        # Determine file type
+        if message.video:
+            file_type = "video"
+        elif message.audio:
+            file_type = "audio"
+        else:
+            file_type = "document"
+        
+        # Initialize R2 storage
+        r2 = get_r2_storage()
+        
+        # Check if file already exists in R2
+        existing_r2_data = r2.check_file_exists(unique_file_id)
+        
+        if existing_r2_data:
+            # File already exists in R2
+            logging.info(f"[Bot {bot_index + 1}] File already exists in R2: {unique_file_id}")
+            
+            # Still update bot file ID in database if this bot doesn't have it yet
+            db = get_database()
+            db.store_file(
+                unique_file_id=unique_file_id,
+                bot_index=bot_index,
+                file_id=file_id,
+                file_name=file_name,
+                file_size=file_size,
+                mime_type=mime_type,
+                dc_id=dc_id,
+                channel_id=channel_id
+            )
+            
+            # Only reply if this is the base bot
+            if should_reply:
+                # Generate file link
+                fqdn = Var.FQDN
+                if not fqdn:
+                    fqdn = "your-domain.com"
+                
+                file_link = f"https://{fqdn}/files/{unique_file_id}"
+                
+                # Format file details
+                size_str = format_file_size(file_size)
+                dc_str = f"DC {dc_id}" if dc_id else "Unknown DC"
+                mime_str = mime_type or "Unknown"
+                
+                reply_text = f"✅ **File Already Exists**\n\n"
+                reply_text += f"**Name:** {file_name}\n"
+                reply_text += f"**Size:** {size_str}\n"
+                reply_text += f"**Type:** {mime_str}\n"
+                reply_text += f"**Location:** {dc_str}\n\n"
+                reply_text += f"🔗 View and download at: {file_link}"
+                
+                # Create button
+                keyboard = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("📥 View File", url=file_link)]
+                ])
+                
+                # Reply to the message
+                await message.reply_text(reply_text, reply_markup=keyboard)
+        
+        else:
+            # File doesn't exist in R2, need to upload
+            logging.info(f"[Bot {bot_index + 1}] New file detected, uploading to R2: {unique_file_id}")
+            
+            # Get all bot file IDs from database first
+            db = get_database()
+            
+            # Store this bot's file_id in database first
+            db.store_file(
+                unique_file_id=unique_file_id,
+                bot_index=bot_index,
+                file_id=file_id,
+                file_name=file_name,
+                file_size=file_size,
+                mime_type=mime_type,
+                dc_id=dc_id,
+                channel_id=channel_id
+            )
+            
+            # Retrieve all bot file IDs for this file
+            file_data = db.get_file_ids(unique_file_id)
+            
+            # Build bot_file_ids dict in R2 format
+            bot_file_ids = {}
+            if file_data and 'bot_file_ids' in file_data:
+                for bot_idx, bot_file_id in file_data['bot_file_ids'].items():
+                    bot_file_ids[f"b_{bot_idx + 1}_file_id"] = bot_file_id
+            else:
+                # Fallback: just use current bot's file_id
+                bot_file_ids[f"b_{bot_index + 1}_file_id"] = file_id
+            
+            # Format data for R2
+            r2_data = r2.format_file_data(
+                unique_file_id=unique_file_id,
+                bot_file_ids=bot_file_ids,
+                caption=caption,
+                file_size=file_size,
+                file_type=file_type,
+                message_id=message_id,
+                channel_id=channel_id,
+                file_name=file_name,
+                mime_type=mime_type
+            )
+            
+            # Upload to R2
+            upload_success = r2.upload_file_data(unique_file_id, r2_data)
+            
+            if upload_success:
+                logging.info(f"[Bot {bot_index + 1}] Successfully uploaded to R2: {unique_file_id}")
+            else:
+                logging.warning(f"[Bot {bot_index + 1}] Failed to upload to R2, but stored in database: {unique_file_id}")
             
             # Only reply if this is the base bot
             if should_reply:
