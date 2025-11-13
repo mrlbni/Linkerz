@@ -153,10 +153,10 @@ async def store_channel_media(client, message: Message, bot_index: int, should_r
         existing_r2_data = r2.check_file_exists(unique_file_id)
         
         if existing_r2_data:
-            # File already exists in R2
+            # File already exists in R2 - just update database
             logging.info(f"[Bot {bot_index + 1}] File already exists in R2: {unique_file_id}")
             
-            # Still update bot file ID in database if this bot doesn't have it yet
+            # Update bot file ID in database
             db = get_database()
             db.store_file(
                 unique_file_id=unique_file_id,
