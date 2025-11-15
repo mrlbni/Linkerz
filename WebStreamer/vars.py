@@ -12,12 +12,8 @@ class Var(object):
     API_ID = int(environ.get("API_ID"))
     API_HASH = str(environ.get("API_HASH"))
     BOT_TOKEN = str(environ.get("BOT_TOKEN"))
-    SLEEP_THRESHOLD = int(environ.get("SLEEP_THRESHOLD", "60"))  # 1 minute
-    # Pyrogram workers: Number of concurrent message handlers per bot
-    # Increased to 6 for better message reply performance (link generation, OTP, file replies)
-    # Each worker uses ~10-15MB. 6 workers = ~60-90MB total
-    # Low workers (3) caused timeout issues with high message volume
-    WORKERS = int(environ.get("WORKERS", "6"))
+    SLEEP_THRESHOLD = int(environ.get("SLEEP_THRESHOLD", "60"))  # 1 minte
+    WORKERS = int(environ.get("WORKERS", "6"))  # 6 workers = 6 commands at once
     BIN_CHANNEL = int(
         environ.get("BIN_CHANNEL", None)
     )  # you NEED to use a CHANNEL when you're using MULTI_CLIENT

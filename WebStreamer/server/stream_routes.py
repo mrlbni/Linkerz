@@ -19,35 +19,8 @@ from WebStreamer import Var, utils, StartTime, __version__, StreamBot
 from concurrent.futures import ThreadPoolExecutor
 import urllib.parse
 from WebStreamer.database import get_database
-from collections import OrderedDict
-import os
 
-# Configurable ThreadPool for handling concurrent streaming requests
-# Default: 250 workers for ~500 concurrent streams (uses ~250MB)
-# Can be overridden via THREADPOOL_WORKERS environment variable
-# Memory usage: ~1MB per worker
-# For 500 concurrent streams: 250 workers = ~250MB (balanced performance/memory)
-# Previous: 1000 workers = 800MB (too high), 50 workers = timeout issues with high load
-THREADPOOL_WORKERS = int(os.environ.get("THREADPOOL_WORKERS", "250"))
-THREADPOOL = ThreadPoolExecutor(max_workers=THREADPOOL_WORKERS)
-
-logging.info(f"ThreadPool initialized with {THREADPOOL_WORKERS} workers")
-
-# LRU Cache for ByteStreamer objects with size limit
-class LRUCache(OrderedDict):
-    """Least Recently Used cache with maximum size limit"""
-    def __init__(self, max_size=15):
-        super().__init__()
-        self.max_size = max_size
-    
-    def __setitem__(self, key, value):
-        if key in self:
-            self.move_to_end(key)
-        super().__setitem__(key, value)
-        if len(self) > self.max_size:
-            oldest = next(iter(self))
-            del self[oldest]
-            logging.debug(f"LRU cache evicted oldest entry, cache size: {len(self)}")
+THREADPOOL = ThreadPoolExecutor(max_workers=1000)
 
 async def sync_to_async(func, *args, wait=True, **kwargs):
     pfunc = partial(func, *args, **kwargs)
@@ -1264,12 +1237,7 @@ async def not_found(_):
         text='<html> <head> <title>LinkerX CDN</title> <style> body{ margin:0; padding:0; width:100%; height:100%; color:#b0bec5; display:table; font-weight:100; font-family:Lato } .container{ text-align:center; display:table-cell; vertical-align:middle } .content{ text-align:center; display:inline-block } .message{ font-size:80px; margin-bottom:40px } .submessage{ font-size:40px; margin-bottom:40px } .copyright{ font-size:20px; } a{ text-decoration:none; color:#3498db } </style> </head> <body> <div class="container"> <div class="content"> <div class="message">LinkerX CDN</div> <div class="submessage">Page Not Found</div> <div class="copyright">Hash Hackers and LiquidX Projects</div> </div> </div> </body> </html>', content_type="text/html"
     )
 
-# LRU cache for ByteStreamer objects to prevent unbounded memory growth
-# Increased from 15 to 50 to reduce cache misses with high concurrent streams
-# Each cached object: ~2-5MB, 50 entries = ~100-250MB
-LRU_CACHE_SIZE = int(os.environ.get("LRU_CACHE_SIZE", "50"))
-class_cache = LRUCache(max_size=LRU_CACHE_SIZE)
-logging.info(f"LRU cache initialized with max size: {LRU_CACHE_SIZE}")
+class_cache = {}
 
 async def media_streamer(request: web.Request, message_id: int, channel_id):
     try:
