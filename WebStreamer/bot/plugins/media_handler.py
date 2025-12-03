@@ -477,3 +477,64 @@ def register_multi_client_handlers():
         )
         
         logging.info(f"Registered start command handler on bot {bot_index + 1} (b_{bot_index + 1})")
+        
+        # ===== Callback Query Handler for Refresh Button =====
+        # Create handler for refresh callback
+        async def refresh_callback_handler(client, callback_query: CallbackQuery):
+            """Handle refresh button callback to regenerate 3-hour download link"""
+            try:
+                # Extract unique_file_id from callback data
+                unique_file_id = callback_query.data.replace("refresh_", "")
+                
+                # Get file info from database
+                db = get_database()
+                file_data = db.get_file_ids(unique_file_id)
+                
+                if not file_data:
+                    await callback_query.answer("❌ File not found in database", show_alert=True)
+                    return
+                
+                file_name = file_data.get('file_name', f"file_{unique_file_id}")
+                file_size = file_data.get('file_size', 0)
+                
+                # Generate new 3-hour download link
+                fqdn = Var.FQDN
+                if not fqdn:
+                    fqdn = "your-domain.com"
+                
+                expires_at = int(time.time()) + (3 * 60 * 60)  # 3 hours from now
+                signature = generate_download_signature(unique_file_id, expires_at, Var.DOWNLOAD_SECRET_KEY)
+                new_download_link = f"https://{fqdn}/download/{unique_file_id}/{expires_at}/{signature}"
+                
+                file_link = f"https://{fqdn}/files/{unique_file_id}"
+                
+                # Update the keyboard with new download link
+                new_keyboard = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("📥 Download", url=new_download_link)],
+                    [InlineKeyboardButton("🔄 Refresh Link", callback_data=f"refresh_{unique_file_id}")],
+                    [InlineKeyboardButton("🌐 View on Network", url=file_link)]
+                ])
+                
+                # Edit the message with updated keyboard
+                try:
+                    await callback_query.message.edit_reply_markup(reply_markup=new_keyboard)
+                    await callback_query.answer("✅ Download link refreshed! Valid for 3 hours.", show_alert=False)
+                    logging.info(f"[Bot {bot_index + 1}] Refreshed download link for file: {unique_file_id}")
+                except Exception as edit_error:
+                    logging.error(f"[Bot {bot_index + 1}] Failed to edit message markup: {edit_error}")
+                    await callback_query.answer("❌ Failed to refresh link", show_alert=True)
+                
+            except Exception as e:
+                logging.error(f"[Bot {bot_index + 1}] Error handling refresh callback: {e}", exc_info=True)
+                await callback_query.answer("❌ An error occurred", show_alert=True)
+        
+        # Register callback query handler
+        bot_client.add_handler(
+            CallbackQueryHandler(
+                refresh_callback_handler,
+                filters=filters.regex(r"^refresh_")
+            ),
+            group=0
+        )
+        
+        logging.info(f"Registered callback query handler on bot {bot_index + 1} (b_{bot_index + 1})")
