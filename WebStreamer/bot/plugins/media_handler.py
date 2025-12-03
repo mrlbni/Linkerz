@@ -336,7 +336,7 @@ def register_multi_client_handlers():
     Register handlers on all multi_clients.
     This should be called after multi_clients are initialized.
     """
-    from pyrogram.handlers import MessageHandler
+    from pyrogram.handlers import MessageHandler, CallbackQueryHandler
     
     for bot_index, bot_client in multi_clients.items():
         if bot_index == 0:
