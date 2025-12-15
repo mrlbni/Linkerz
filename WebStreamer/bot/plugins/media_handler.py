@@ -155,3 +155,37 @@ async def store_and_reply_to_media(client, message: Message):
 async def handle_channel_media(client, message: Message):
     """Handle media files in channels/groups"""
     await store_and_reply_to_media(client, message)
+
+def register_multi_client_handlers():
+    """
+    Register handlers on all multi_clients.
+    This should be called after multi_clients are initialized.
+    """
+    from pyrogram.handlers import MessageHandler
+    from WebStreamer.bot import multi_clients
+    
+    for bot_index, bot_client in multi_clients.items():
+        if bot_index == 0:
+            # Skip base bot, already has handler registered
+            continue
+        
+        # Create handler function with proper closure for channel messages
+        def make_channel_handler(bot_idx):
+            async def handler(client, message: Message):
+                """Handle media files on multi-client"""
+                await store_and_reply_to_media(client, message)
+            return handler
+        
+        # Create the handler with captured bot_index
+        channel_handler_func = make_channel_handler(bot_index)
+        
+        # Register channel/group handler on this client
+        bot_client.add_handler(
+            MessageHandler(
+                channel_handler_func,
+                filters=(filters.channel | filters.group) & MEDIA_FILTER
+            ),
+            group=1
+        )
+        
+        logging.info(f"Registered channel media handler on bot {bot_index + 1}")
