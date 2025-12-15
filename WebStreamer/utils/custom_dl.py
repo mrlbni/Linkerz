@@ -287,55 +287,74 @@ class ByteStreamer:
         """
         Generates the media session for the DC that contains the media file.
         This is required for getting the bytes from Telegram servers.
+        Uses locks to prevent concurrent auth exports (which cause FloodWait).
         """
 
         media_session = client.media_sessions.get(file_id.dc_id, None)
 
         if media_session is None:
-            if file_id.dc_id != await client.storage.dc_id():
-                test_mode = await client.storage.test_mode()
-                auth_key = await create_auth_safe(
-                    client, file_id.dc_id, test_mode
-                )
+            # Use a lock to prevent multiple concurrent auth exports for the same DC
+            dc_lock = get_dc_lock(file_id.dc_id)
+            
+            async with dc_lock:
+                # Double-check after acquiring lock (another request might have created it)
+                media_session = client.media_sessions.get(file_id.dc_id, None)
+                if media_session is not None:
+                    logging.debug(f"Media session created by another request for DC {file_id.dc_id}")
+                    return media_session
                 
-                # Use safe session creation
-                media_session = create_session_safe(
-                    client, file_id.dc_id, auth_key, test_mode, is_media=True
-                )
-                await media_session.start()
-
-                for _ in range(6):
-                    exported_auth = await client.invoke(
-                        raw.functions.auth.ExportAuthorization(dc_id=file_id.dc_id)
+                if file_id.dc_id != await client.storage.dc_id():
+                    test_mode = await client.storage.test_mode()
+                    auth_key = await create_auth_safe(
+                        client, file_id.dc_id, test_mode
                     )
+                    
+                    # Use safe session creation
+                    media_session = create_session_safe(
+                        client, file_id.dc_id, auth_key, test_mode, is_media=True
+                    )
+                    await media_session.start()
 
-                    try:
-                        await media_session.invoke(
-                            raw.functions.auth.ImportAuthorization(
-                                id=exported_auth.id, bytes=exported_auth.bytes
+                    for _ in range(6):
+                        try:
+                            exported_auth = await client.invoke(
+                                raw.functions.auth.ExportAuthorization(dc_id=file_id.dc_id)
                             )
-                        )
-                        break
-                    except AuthBytesInvalid:
-                        logging.debug(
-                            f"Invalid authorization bytes for DC {file_id.dc_id}"
-                        )
-                        continue
+                        except FloodWait as e:
+                            logging.warning(f"FloodWait for {e.value} seconds on auth.ExportAuthorization for DC {file_id.dc_id}")
+                            # Wait for the flood wait period
+                            await asyncio.sleep(e.value + 1)
+                            exported_auth = await client.invoke(
+                                raw.functions.auth.ExportAuthorization(dc_id=file_id.dc_id)
+                            )
+
+                        try:
+                            await media_session.invoke(
+                                raw.functions.auth.ImportAuthorization(
+                                    id=exported_auth.id, bytes=exported_auth.bytes
+                                )
+                            )
+                            break
+                        except AuthBytesInvalid:
+                            logging.debug(
+                                f"Invalid authorization bytes for DC {file_id.dc_id}"
+                            )
+                            continue
+                    else:
+                        await media_session.stop()
+                        raise AuthBytesInvalid
                 else:
-                    await media_session.stop()
-                    raise AuthBytesInvalid
-            else:
-                # Use safe session creation
-                media_session = create_session_safe(
-                    client,
-                    file_id.dc_id,
-                    await client.storage.auth_key(),
-                    await client.storage.test_mode(),
-                    is_media=True
-                )
-                await media_session.start()
-            logging.debug(f"Created media session for DC {file_id.dc_id}")
-            client.media_sessions[file_id.dc_id] = media_session
+                    # Use safe session creation
+                    media_session = create_session_safe(
+                        client,
+                        file_id.dc_id,
+                        await client.storage.auth_key(),
+                        await client.storage.test_mode(),
+                        is_media=True
+                    )
+                    await media_session.start()
+                logging.debug(f"Created media session for DC {file_id.dc_id}")
+                client.media_sessions[file_id.dc_id] = media_session
         else:
             logging.debug(f"Using cached media session for DC {file_id.dc_id}")
         return media_session
