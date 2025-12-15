@@ -1,8 +1,7 @@
-# Simplified media handler - single "DL Link" button
+# Simplified media handler - single "DL Link" button - No database, R2 only
 import logging
 from pyrogram import filters
 from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
-from WebStreamer.database import get_database
 from WebStreamer.r2_storage import get_r2_storage
 from WebStreamer.bot import StreamBot
 from WebStreamer.vars import Var
