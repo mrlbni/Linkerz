@@ -310,6 +310,8 @@ async def store_and_reply_to_media(client, message: Message):
 @StreamBot.on_message((filters.channel | filters.group) & MEDIA_FILTER, group=1)
 async def handle_channel_media(client, message: Message):
     """Handle media files in channels/groups"""
+    # Ensure cleanup task is running
+    start_cleanup_task()
     await store_and_reply_to_media(client, message)
 
 def register_multi_client_handlers():
