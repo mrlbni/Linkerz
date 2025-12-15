@@ -153,7 +153,7 @@ async def start_services():
         print("-------------------- Initializing Database --------------------")
         try:
             db = get_database()
-            logging.info("Database initialized successfully")
+            logging.info("Database initialized successfully (simplified, no auth)")
             print("------------------------------ DONE ------------------------------")
         except Exception as e:
             logging.error(f"Failed to initialize database: {e}")
