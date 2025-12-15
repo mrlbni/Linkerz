@@ -24,10 +24,46 @@ _processed_lock = asyncio.Lock()
 PROCESSED_TTL = 300
 # Lock timeout to prevent multiple bots processing same message
 PROCESS_LOCK_TTL = 30
+# Cleanup interval (run every 2 minutes)
+CLEANUP_INTERVAL = 120
 
 # Cache for bot user IDs to avoid repeated get_me() calls
 # Format: {client_id: bot_user_id}
 _bot_user_id_cache = {}
+
+# Flag to track if cleanup task is running
+_cleanup_task_started = False
+
+
+async def scheduled_cleanup():
+    """Background task to periodically clean up expired entries from _processed_messages"""
+    global _processed_messages
+    while True:
+        try:
+            await asyncio.sleep(CLEANUP_INTERVAL)
+            current_time = time.time()
+            async with _processed_lock:
+                # Find and remove expired entries
+                expired_keys = [
+                    k for k, ts in _processed_messages.items()
+                    if current_time - ts > PROCESSED_TTL
+                ]
+                for k in expired_keys:
+                    del _processed_messages[k]
+                
+                if expired_keys:
+                    logging.debug(f"Cleaned up {len(expired_keys)} expired message entries")
+        except Exception as e:
+            logging.error(f"Error in scheduled cleanup: {e}")
+
+
+def start_cleanup_task():
+    """Start the cleanup background task if not already running"""
+    global _cleanup_task_started
+    if not _cleanup_task_started:
+        asyncio.create_task(scheduled_cleanup())
+        _cleanup_task_started = True
+        logging.info("Started scheduled cleanup task for processed messages")
 
 def format_file_size(bytes_size: int) -> str:
     """Format file size in human readable format"""
