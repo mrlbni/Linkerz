@@ -51,26 +51,47 @@ async def store_and_reply_to_media(client, message: Message):
         channel_id = message.chat.id if message.chat else None
         message_id = message.id
         
+        # Get caption from message
+        caption = message.caption or None
+        
+        # Determine file type
+        file_type = None
+        if message.video:
+            file_type = "video"
+        elif message.audio:
+            file_type = "audio"
+        elif message.document:
+            file_type = "document"
+        
+        # Extract video-specific metadata if it's a video
+        video_duration = None
+        video_width = None
+        video_height = None
+        if message.video:
+            video_duration = getattr(media, 'duration', None)
+            video_width = getattr(media, 'width', None)
+            video_height = getattr(media, 'height', None)
+        
         # Store metadata in R2 only
         r2 = get_r2_storage()
         try:
-            # Get bot's Telegram user ID
-            bot_me = await client.get_me()
-            bot_user_id = bot_me.id
-            
             r2_data = r2.format_file_metadata(
                 unique_file_id=unique_file_id,
-                bot_user_id=bot_user_id,
                 file_id=file_id,
                 file_name=file_name,
                 file_size=file_size,
                 mime_type=mime_type,
                 message_id=message_id,
-                channel_id=channel_id
+                channel_id=channel_id,
+                caption=caption,
+                file_type=file_type,
+                video_duration=video_duration,
+                video_width=video_width,
+                video_height=video_height
             )
             
             r2.upload_file_metadata(unique_file_id, r2_data)
-            logging.info(f"Uploaded to R2: {unique_file_id} with bot_id {bot_user_id}")
+            logging.info(f"Uploaded to R2: {unique_file_id} - {file_type} - {file_name}")
         except Exception as r2_error:
             logging.warning(f"Failed to upload to R2: {r2_error}")
         
