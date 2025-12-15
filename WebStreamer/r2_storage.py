@@ -101,11 +101,18 @@ class R2Storage:
         
         Args:
             unique_file_id: Unique file identifier
+            use_cache: If True, check cache first (default True)
             
         Returns:
             Dict with file metadata if exists, None otherwise
         """
         try:
+            # Check cache first
+            if use_cache:
+                cached_data = self._get_from_cache(unique_file_id)
+                if cached_data is not None:
+                    return cached_data
+            
             # Build R2 public URL
             url = f"https://{self.r2_public}/{self.r2_folder}/{unique_file_id}.json"
             
@@ -116,6 +123,8 @@ class R2Storage:
                 # File exists, parse and return JSON data
                 file_data = response.json()
                 logging.info(f"File metadata found in R2: {unique_file_id}")
+                # Cache the result
+                self._set_cache(unique_file_id, file_data)
                 return file_data
             elif response.status_code == 404:
                 # File doesn't exist
