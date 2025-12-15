@@ -29,8 +29,8 @@ def sanitize_header_value(value: str) -> str:
         return value
     # Remove carriage return and newline characters
     sanitized = value.replace('\r', '').replace('\n', ' ')
-    # Also remove any null bytes
-    sanitized = sanitized.replace('\x00', '')
+    # Also remove any null bytes using chr(0)
+    sanitized = sanitized.replace(chr(0), '')
     # Strip leading/trailing whitespace
     return sanitized.strip()
 
