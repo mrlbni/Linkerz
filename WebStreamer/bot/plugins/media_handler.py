@@ -51,18 +51,7 @@ async def store_and_reply_to_media(client, message: Message):
         channel_id = message.chat.id if message.chat else None
         message_id = message.id
         
-        # Store in database
-        db = get_database()
-        db.store_file(
-            unique_file_id=unique_file_id,
-            file_id=file_id,
-            file_name=file_name,
-            file_size=file_size,
-            mime_type=mime_type,
-            channel_id=channel_id
-        )
-        
-        # Store in R2
+        # Store metadata in R2 only
         r2 = get_r2_storage()
         try:
             # Get bot's Telegram user ID
