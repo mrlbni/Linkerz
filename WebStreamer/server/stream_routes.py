@@ -191,7 +191,7 @@ async def link_route_handler(request: web.Request):
 
 @routes.get("/dl/{unique_file_id}/{file_id}", allow_head=True)
 async def direct_download(request: web.Request):
-    """Stream file directly using file_id - no database, metadata from R2"""
+    """Stream file directly using file_id - no database, metadata from R2 with caching"""
     try:
         unique_file_id = request.match_info['unique_file_id']
         file_id = request.match_info['file_id']
@@ -212,12 +212,23 @@ async def direct_download(request: web.Request):
         from pyrogram.file_id import FileId
         file_id_obj = FileId.decode(file_id)
         
-        # Try to get metadata from R2 (for proper filename and size)
-        r2 = get_r2_storage()
-        r2_metadata = r2.get_file_metadata(unique_file_id)
+        # Try to get metadata from cache first, then R2
+        r2_metadata = metadata_cache.get(unique_file_id)
         
         if r2_metadata:
-            # Use metadata from R2
+            logging.debug(f"Using cached metadata for {unique_file_id}")
+        else:
+            # Cache miss - fetch from R2
+            r2 = get_r2_storage()
+            r2_metadata = r2.get_file_metadata(unique_file_id)
+            
+            if r2_metadata:
+                # Store in cache for future requests
+                metadata_cache.set(unique_file_id, r2_metadata)
+                logging.info(f"File metadata found in R2 and cached: {unique_file_id}")
+        
+        if r2_metadata:
+            # Use metadata from cache/R2
             file_size = r2_metadata.get('file_size_bytes', 0)
             mime_type = r2_metadata.get('mime_type', 'application/octet-stream')
             file_name = r2_metadata.get('file_name', 'file')
