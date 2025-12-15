@@ -145,13 +145,13 @@ class R2Storage:
             if response.status_code == 200:
                 # File exists, parse and return JSON data
                 file_data = response.json()
-                logging.info(f"File metadata found in R2: {unique_file_id}")
+                logging.debug(f"R2 fetch: {unique_file_id}")
                 # Cache the result
                 self._set_cache(unique_file_id, file_data)
                 return file_data
             elif response.status_code == 404:
                 # File doesn't exist
-                logging.info(f"File metadata not found in R2: {unique_file_id}")
+                logging.debug(f"R2 not found: {unique_file_id}")
                 return None
             else:
                 logging.warning(f"Unexpected R2 status code {response.status_code} for {unique_file_id}")
