@@ -25,3 +25,10 @@ StreamBot = Client(
 
 multi_clients = {}
 work_loads = {}
+
+# Cached bot info (populated after bot starts)
+cached_bot_info = {
+    "username": None,
+    "first_name": None,
+    "id": None
+}
