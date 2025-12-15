@@ -58,7 +58,7 @@ async def store_and_reply_to_media(client, message: Message):
             bot_me = await client.get_me()
             bot_user_id = bot_me.id
             
-            r2_data = r2.format_file_data(
+            r2_data = r2.format_file_metadata(
                 unique_file_id=unique_file_id,
                 bot_user_id=bot_user_id,
                 file_id=file_id,
@@ -69,7 +69,7 @@ async def store_and_reply_to_media(client, message: Message):
                 channel_id=channel_id
             )
             
-            r2.upload_file_data(unique_file_id, r2_data)
+            r2.upload_file_metadata(unique_file_id, r2_data)
             logging.info(f"Uploaded to R2: {unique_file_id} with bot_id {bot_user_id}")
         except Exception as r2_error:
             logging.warning(f"Failed to upload to R2: {r2_error}")
