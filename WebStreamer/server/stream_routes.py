@@ -205,12 +205,12 @@ async def link_route_handler(request: web.Request):
 
 @routes.get("/dl/{unique_file_id}/{file_id}", allow_head=True)
 async def direct_download(request: web.Request):
-    """Stream file directly using file_id - no database, metadata from R2 with caching"""
+    """Stream file directly using file_id - no database, metadata from R2 with disk caching"""
     try:
         unique_file_id = request.match_info['unique_file_id']
         file_id = request.match_info['file_id']
         
-        logging.info(f"Direct download request for unique_file_id: {unique_file_id}, file_id: {file_id}")
+        logging.debug(f"Download request: {unique_file_id}")
         
         # Get a client to stream with
         index = min(work_loads, key=work_loads.get)
@@ -226,23 +226,12 @@ async def direct_download(request: web.Request):
         from pyrogram.file_id import FileId
         file_id_obj = FileId.decode(file_id)
         
-        # Try to get metadata from cache first, then R2
-        r2_metadata = metadata_cache.get(unique_file_id)
+        # Get metadata from R2 (already has disk caching built-in)
+        r2 = get_r2_storage()
+        r2_metadata = r2.get_file_metadata(unique_file_id)
         
         if r2_metadata:
-            logging.debug(f"Using cached metadata for {unique_file_id}")
-        else:
-            # Cache miss - fetch from R2
-            r2 = get_r2_storage()
-            r2_metadata = r2.get_file_metadata(unique_file_id)
-            
-            if r2_metadata:
-                # Store in cache for future requests
-                metadata_cache.set(unique_file_id, r2_metadata)
-                logging.info(f"File metadata found in R2 and cached: {unique_file_id}")
-        
-        if r2_metadata:
-            # Use metadata from cache/R2
+            # Use metadata from R2 cache
             file_size = r2_metadata.get('file_size_bytes', 0)
             mime_type = r2_metadata.get('mime_type', 'application/octet-stream')
             file_name = r2_metadata.get('file_name', 'file')
@@ -251,10 +240,10 @@ async def direct_download(request: web.Request):
             setattr(file_id_obj, "mime_type", mime_type)
             setattr(file_id_obj, "file_name", file_name)
             
-            logging.info(f"Using R2 metadata: {file_name} ({file_size} bytes)")
+            logging.debug(f"Using cached metadata: {file_name} ({file_size} bytes)")
         else:
-            # No R2 metadata, try to get from Telegram or use defaults
-            logging.warning(f"No R2 metadata found for {unique_file_id}, will try Telegram")
+            # No R2 metadata, use defaults
+            logging.debug(f"No R2 metadata for {unique_file_id}")
             setattr(file_id_obj, "file_size", 0)
             setattr(file_id_obj, "mime_type", "application/octet-stream")
             setattr(file_id_obj, "file_name", "file")
@@ -264,20 +253,17 @@ async def direct_download(request: web.Request):
         # If file_size is 0, we need to get it from Telegram
         if file_size == 0:
             try:
-                # This might fail if the file_id is not accessible by this client
                 message = await faster_client.get_messages(file_id_obj.chat_id, file_id_obj.message_id)
                 media = message.video or message.audio or message.document
                 if media:
                     file_size = media.file_size
                     setattr(file_id_obj, "file_size", file_size)
-                    # Also get filename if available
                     if hasattr(media, 'file_name') and media.file_name:
                         setattr(file_id_obj, "file_name", media.file_name)
                     if hasattr(media, 'mime_type') and media.mime_type:
                         setattr(file_id_obj, "mime_type", media.mime_type)
             except Exception as tg_error:
                 logging.warning(f"Failed to get file info from Telegram: {tg_error}")
-                # If we can't get size, set a large default
                 file_size = 1024 * 1024 * 1024  # 1GB default
                 setattr(file_id_obj, "file_size", file_size)
         
@@ -332,7 +318,7 @@ async def direct_download(request: web.Request):
         if "video/" in mime_type or "audio/" in mime_type or "/html" in mime_type:
             disposition = "inline"
         
-        logging.info(f"Successfully streaming file: {file_name}")
+        logging.debug(f"Streaming: {file_name}")
         
         return web.Response(
             status=206 if range_header else 200,
