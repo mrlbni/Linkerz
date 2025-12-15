@@ -22,8 +22,6 @@ THREADPOOL = ThreadPoolExecutor(max_workers=1000)
 
 # Disk-based cache for file metadata to reduce R2 lookups
 # Uses /tmp which is ephemeral on Heroku - cleared on restart
-import os
-import json
 
 METADATA_CACHE_DIR = "/tmp/r2_cache/metadata"
 
