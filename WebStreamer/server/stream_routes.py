@@ -18,6 +18,38 @@ from WebStreamer.r2_storage import get_r2_storage
 
 THREADPOOL = ThreadPoolExecutor(max_workers=1000)
 
+# In-memory cache for file metadata to reduce R2 lookups
+# Especially useful for download managers that send multiple parallel requests
+class MetadataCache:
+    def __init__(self, ttl_seconds=300):  # 5 minute TTL
+        self._cache = {}
+        self._ttl = ttl_seconds
+    
+    def get(self, key):
+        """Get cached metadata if not expired"""
+        if key in self._cache:
+            data, timestamp = self._cache[key]
+            if time.time() - timestamp < self._ttl:
+                return data
+            else:
+                # Expired, remove it
+                del self._cache[key]
+        return None
+    
+    def set(self, key, value):
+        """Cache metadata with current timestamp"""
+        self._cache[key] = (value, time.time())
+    
+    def cleanup(self):
+        """Remove expired entries (call periodically if needed)"""
+        current_time = time.time()
+        expired_keys = [k for k, (_, ts) in self._cache.items() if current_time - ts >= self._ttl]
+        for k in expired_keys:
+            del self._cache[k]
+
+# Global metadata cache instance
+metadata_cache = MetadataCache(ttl_seconds=300)  # Cache for 5 minutes
+
 async def sync_to_async(func, *args, wait=True, **kwargs):
     pfunc = partial(func, *args, **kwargs)
     future = bot_loop.run_in_executor(THREADPOOL, pfunc)
