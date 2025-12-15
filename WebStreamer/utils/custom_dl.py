@@ -8,9 +8,18 @@ from pyrogram import Client, utils, raw
 from .file_properties import get_file_ids
 from pyrogram.session import Session, Auth
 import inspect
-from pyrogram.errors import AuthBytesInvalid
+from pyrogram.errors import AuthBytesInvalid, FloodWait
 from WebStreamer.server.exceptions import FIleNotFound
 from pyrogram.file_id import FileId, FileType, ThumbnailSource
+
+# Locks to prevent concurrent auth exports per DC (prevents FloodWait)
+_dc_session_locks: Dict[int, asyncio.Lock] = {}
+
+def get_dc_lock(dc_id: int) -> asyncio.Lock:
+    """Get or create a lock for a specific DC to prevent concurrent auth exports"""
+    if dc_id not in _dc_session_locks:
+        _dc_session_locks[dc_id] = asyncio.Lock()
+    return _dc_session_locks[dc_id]
 
 
 def get_dc_config(dc_id, test_mode):
