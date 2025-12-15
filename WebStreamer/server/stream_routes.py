@@ -1,4 +1,4 @@
-# Simplified streaming routes - no auth, no UI
+# Simplified streaming routes - no database, no auth
 import re
 import time
 import math
@@ -14,7 +14,6 @@ from WebStreamer.server.exceptions import FIleNotFound, InvalidHash
 from WebStreamer import Var, utils, StartTime, __version__, StreamBot
 from concurrent.futures import ThreadPoolExecutor
 import urllib.parse
-from WebStreamer.database import get_database
 from WebStreamer.r2_storage import get_r2_storage
 
 THREADPOOL = ThreadPoolExecutor(max_workers=1000)
@@ -45,7 +44,7 @@ async def favicon_handler(_):
 # Public API to generate download link from channel/message
 @routes.get("/link/{path:.*}", allow_head=True)
 async def link_route_handler(request: web.Request):
-    """Generate download link for a file from channel_id/message_id - No auth, no expiry"""
+    """Generate download link for a file from channel_id/message_id - No auth, no expiry, no database"""
     try:
         # eg. path is /link/channelid/messageid
         parts = request.match_info['path'].split("/")
@@ -82,30 +81,14 @@ async def link_route_handler(request: web.Request):
         file_size = file_id.file_size
         mime_type = file_id.mime_type
         
-        # Store in database
-        db = get_database()
-        if db:
-            try:
-                db.store_file(
-                    unique_file_id=unique_file_id,
-                    file_id=telegram_file_id,
-                    file_name=file_name,
-                    file_size=file_size,
-                    mime_type=mime_type,
-                    channel_id=int(channel_id)
-                )
-                logging.info(f"Stored file {unique_file_id} from channel {channel_id}")
-            except Exception as store_error:
-                logging.warning(f"Failed to store file in database: {store_error}")
-        
-        # Store in R2
+        # Store metadata in R2 only
         r2 = get_r2_storage()
         try:
             # Get bot's Telegram user ID
             bot_me = await faster_client.get_me()
             bot_user_id = bot_me.id
             
-            r2_data = r2.format_file_data(
+            r2_data = r2.format_file_metadata(
                 unique_file_id=unique_file_id,
                 bot_user_id=bot_user_id,
                 file_id=telegram_file_id,
@@ -116,8 +99,8 @@ async def link_route_handler(request: web.Request):
                 channel_id=int(channel_id)
             )
             
-            r2.upload_file_data(unique_file_id, r2_data)
-            logging.info(f"Uploaded to R2: {unique_file_id} with bot_id {bot_user_id}")
+            r2.upload_file_metadata(unique_file_id, r2_data)
+            logging.info(f"Uploaded metadata to R2: {unique_file_id} with bot_id {bot_user_id}")
         except Exception as r2_error:
             logging.warning(f"Failed to upload to R2: {r2_error}")
         
@@ -154,7 +137,7 @@ async def link_route_handler(request: web.Request):
 
 @routes.get("/dl/{unique_file_id}/{file_id}", allow_head=True)
 async def direct_download(request: web.Request):
-    """Stream file directly using file_id - no lookups, no auth"""
+    """Stream file directly using file_id - no database, metadata from R2"""
     try:
         unique_file_id = request.match_info['unique_file_id']
         file_id = request.match_info['file_id']
@@ -175,16 +158,24 @@ async def direct_download(request: web.Request):
         from pyrogram.file_id import FileId
         file_id_obj = FileId.decode(file_id)
         
-        # Try to get additional info from database (optional)
-        db = get_database()
-        file_data = db.get_file_info(unique_file_id)
+        # Try to get metadata from R2 (for proper filename and size)
+        r2 = get_r2_storage()
+        r2_metadata = r2.get_file_metadata(unique_file_id)
         
-        if file_data:
-            setattr(file_id_obj, "file_size", file_data['file_size'] or 0)
-            setattr(file_id_obj, "mime_type", file_data['mime_type'] or "application/octet-stream")
-            setattr(file_id_obj, "file_name", file_data['file_name'] or "file")
+        if r2_metadata:
+            # Use metadata from R2
+            file_size = r2_metadata.get('file_size_bytes', 0)
+            mime_type = r2_metadata.get('mime_type', 'application/octet-stream')
+            file_name = r2_metadata.get('file_name', 'file')
+            
+            setattr(file_id_obj, "file_size", file_size)
+            setattr(file_id_obj, "mime_type", mime_type)
+            setattr(file_id_obj, "file_name", file_name)
+            
+            logging.info(f"Using R2 metadata: {file_name} ({file_size} bytes)")
         else:
-            # Set defaults if not in DB
+            # No R2 metadata, try to get from Telegram or use defaults
+            logging.warning(f"No R2 metadata found for {unique_file_id}, will try Telegram")
             setattr(file_id_obj, "file_size", 0)
             setattr(file_id_obj, "mime_type", "application/octet-stream")
             setattr(file_id_obj, "file_name", "file")
@@ -200,7 +191,13 @@ async def direct_download(request: web.Request):
                 if media:
                     file_size = media.file_size
                     setattr(file_id_obj, "file_size", file_size)
-            except:
+                    # Also get filename if available
+                    if hasattr(media, 'file_name') and media.file_name:
+                        setattr(file_id_obj, "file_name", media.file_name)
+                    if hasattr(media, 'mime_type') and media.mime_type:
+                        setattr(file_id_obj, "mime_type", media.mime_type)
+            except Exception as tg_error:
+                logging.warning(f"Failed to get file info from Telegram: {tg_error}")
                 # If we can't get size, set a large default
                 file_size = 1024 * 1024 * 1024  # 1GB default
                 setattr(file_id_obj, "file_size", file_size)
@@ -256,7 +253,7 @@ async def direct_download(request: web.Request):
         if "video/" in mime_type or "audio/" in mime_type or "/html" in mime_type:
             disposition = "inline"
         
-        logging.info(f"Successfully streaming file")
+        logging.info(f"Successfully streaming file: {file_name}")
         
         return web.Response(
             status=206 if range_header else 200,
