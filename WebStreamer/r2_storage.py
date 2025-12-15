@@ -92,16 +92,19 @@ class R2Storage:
             logging.error(f"Unexpected error uploading to R2: {e}")
             return False
     
-    def format_file_metadata(self, unique_file_id: str, file_id: str,
+    def format_file_metadata(self, unique_file_id: str, bot_user_id: int, file_id: str,
                         file_name: str, file_size: int, mime_type: str,
                         message_id: int, channel_id: int, caption: str = None,
                         file_type: str = None, video_duration: int = None,
-                        video_width: int = None, video_height: int = None) -> Dict:
+                        video_width: int = None, video_height: int = None,
+                        existing_data: Dict = None) -> Dict:
         """
         Format file metadata for R2 storage with complete structure
+        Merges with existing data if provided
         
         Args:
             unique_file_id: Unique file identifier
+            bot_user_id: Telegram bot's user ID (used as key in bot_file_ids)
             file_id: Telegram file ID
             file_name: Name of the file
             file_size: File size in bytes
@@ -113,36 +116,45 @@ class R2Storage:
             video_duration: Video duration in seconds (optional, for videos)
             video_width: Video width in pixels (optional, for videos)
             video_height: Video height in pixels (optional, for videos)
+            existing_data: Existing R2 data to merge with (optional)
             
         Returns:
             Formatted dictionary ready for R2 upload
         """
-        data = {
-            "unique_id": unique_file_id,
-            "bot_file_ids": {
-                "b_1_file_id": file_id
-            },
-            "file_name": file_name,
-            "file_size_bytes": file_size,
-            "mime_type": mime_type,
-            "original_message_id": message_id,
-            "source_channel_id": channel_id
-        }
-        
-        # Add optional fields if provided
-        if caption:
-            data["caption"] = caption
+        # Start with existing data if available, otherwise create new
+        if existing_data:
+            data = existing_data.copy()
+            # Merge bot_file_ids - keep existing ones and add new
+            if "bot_file_ids" not in data:
+                data["bot_file_ids"] = {}
+            data["bot_file_ids"][str(bot_user_id)] = file_id
+        else:
+            data = {
+                "unique_id": unique_file_id,
+                "bot_file_ids": {
+                    str(bot_user_id): file_id
+                },
+                "file_name": file_name,
+                "file_size_bytes": file_size,
+                "mime_type": mime_type,
+                "original_message_id": message_id,
+                "source_channel_id": channel_id
+            }
             
-        if file_type:
-            data["file_type"] = file_type
-            
-        # Add video-specific metadata if available
-        if video_duration is not None:
-            data["video_duration_seconds"] = video_duration
-        if video_width is not None:
-            data["video_width"] = video_width
-        if video_height is not None:
-            data["video_height"] = video_height
+            # Add optional fields if provided
+            if caption:
+                data["caption"] = caption
+                
+            if file_type:
+                data["file_type"] = file_type
+                
+            # Add video-specific metadata if available
+            if video_duration is not None:
+                data["video_duration_seconds"] = video_duration
+            if video_width is not None:
+                data["video_width"] = video_width
+            if video_height is not None:
+                data["video_height"] = video_height
             
         return data
 
