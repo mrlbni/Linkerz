@@ -112,6 +112,22 @@ async def store_and_reply_to_media(client, message: Message):
             logging.warning(f"Failed to upload to R2: {r2_error}")
         
         # Generate download link
+        # Check if message already has a "DL Link" button (added by another bot instance)
+        has_dl_button = False
+        if message.reply_markup and hasattr(message.reply_markup, 'inline_keyboard'):
+            for row in message.reply_markup.inline_keyboard:
+                for button in row:
+                    if button.text == "DL Link":
+                        has_dl_button = True
+                        break
+                if has_dl_button:
+                    break
+        
+        if has_dl_button:
+            # Another bot already added the DL Link button, skip adding button
+            logging.info(f"DL Link button already exists for {unique_file_id}, skipping button addition (metadata stored in R2)")
+            return
+        
         fqdn = Var.FQDN
         if not fqdn:
             fqdn = "your-domain.com"
