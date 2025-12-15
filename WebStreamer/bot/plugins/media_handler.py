@@ -1,5 +1,7 @@
 # Simplified media handler - single "DL Link" button - No database, R2 only
 import logging
+import time
+import asyncio
 from pyrogram import filters
 from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 from WebStreamer.r2_storage import get_r2_storage
@@ -13,6 +15,15 @@ MEDIA_FILTER = (
     | filters.audio 
     | filters.document
 )
+
+# In-memory tracking for processed messages to avoid duplicates
+# Format: {(chat_id, message_id, bot_id): timestamp}
+_processed_messages = {}
+_processed_lock = asyncio.Lock()
+# TTL for processed message tracking (5 minutes)
+PROCESSED_TTL = 300
+# Lock timeout to prevent multiple bots processing same message
+PROCESS_LOCK_TTL = 30
 
 def format_file_size(bytes_size: int) -> str:
     """Format file size in human readable format"""
