@@ -11,8 +11,11 @@ from os import getcwd
 utils.MIN_CHANNEL_ID = -1007852516352
 utils.MIN_CHAT_ID = -999999999999
 
+# Session name based on BOT_ID from env (allows multiple bots on same GitHub repo)
+session_name = str(Var.BOT_ID) if Var.BOT_ID else "WebStreamer"
+
 StreamBot = Client(
-    name="WebStreamer",  # This will create a session file named "WebStreamer.session"
+    name=session_name,  # This will create a session file named "{bot_id}.session"
     api_id=Var.API_ID,
     api_hash=Var.API_HASH,
     workdir=getcwd(),  # Ensure the working directory is set correctly
