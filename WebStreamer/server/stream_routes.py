@@ -352,9 +352,13 @@ async def direct_download(request: web.Request):
                 return web.Response(text=error_page, content_type="text/html", status=410)
             # If it's not a critical error, continue with streaming attempt
         
-        body = tg_connect.yield_file(
+        # Get the file generator
+        file_generator = tg_connect.yield_file(
             file_id_obj, index, offset, first_part_cut, last_part_cut, part_count, chunk_size
         )
+        
+        # Wrap it with error handling
+        body = safe_yield_file(file_generator)
         
         disposition = "attachment"
         
