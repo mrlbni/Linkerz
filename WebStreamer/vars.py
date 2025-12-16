@@ -53,3 +53,7 @@ class Var(object):
     
     # Bot User ID (from Telegram) - avoids repeated API calls
     BOT_ID = int(environ.get("BOT_ID", 0)) if environ.get("BOT_ID") else None
+    
+    # Toggle to enable/disable sending download links to channels
+    # If False, bot still listens to channels but won't respond with links
+    SEND_LINKS_TO_CHANNELS = environ.get("SEND_LINKS_TO_CHANNELS", "true").lower() == "true"
