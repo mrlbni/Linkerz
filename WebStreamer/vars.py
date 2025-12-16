@@ -46,11 +46,6 @@ class Var(object):
     # Secret key for download link integrity (generate one if not set)
     DOWNLOAD_SECRET_KEY = str(environ.get("DOWNLOAD_SECRET_KEY", "change-this-secret-key-in-production"))
     
-    # R2 Storage Configuration
-    R2_Domain = str(environ.get("R2_Domain", "tga-hd.api.hashhackers.com"))
-    R2_Folder = str(environ.get("R2_Folder", "linkerz"))
-    R2_Public = str(environ.get("R2_Public", "tg-files-identifier.hashhackers.com"))
-    
     # Bot User ID (from Telegram) - avoids repeated API calls
     BOT_ID = int(environ.get("BOT_ID", 0)) if environ.get("BOT_ID") else None
     
