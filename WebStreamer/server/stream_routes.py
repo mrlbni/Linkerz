@@ -172,6 +172,35 @@ async def link_route_handler(request: web.Request):
             'message': error_message
         }, status=500)
 
+def get_error_page(error_title, error_message):
+    """Generate styled error page matching the home page design"""
+    html_content = f'''<html>
+<head>
+    <title>{error_title} - LinkerX CDN</title>
+    <style>
+        body{{ margin:0; padding:0; width:100%; height:100%; color:#b0bec5; display:table; font-weight:100; font-family:Lato }}
+        .container{{ text-align:center; display:table-cell; vertical-align:middle }}
+        .content{{ text-align:center; display:inline-block }}
+        .message{{ font-size:80px; margin-bottom:40px }}
+        .submessage{{ font-size:40px; margin-bottom:40px; color:#e74c3c }}
+        .error-detail{{ font-size:20px; margin-bottom:30px; color:#95a5a6 }}
+        .copyright{{ font-size:20px; }}
+        a{{ text-decoration:none; color:#3498db }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="content">
+            <div class="message">LinkerX CDN</div>
+            <div class="submessage">{error_message}</div>
+            <div class="error-detail">{error_title}</div>
+            <div class="copyright">Hash Hackers and LiquidX Projects</div>
+        </div>
+    </div>
+</body>
+</html>'''
+    return html_content
+
 @routes.get("/dl/{unique_file_id}/{file_id}/{size}/{filename}", allow_head=True)
 async def direct_download(request: web.Request):
     """Stream file directly using file_id - metadata from URL path"""
@@ -226,7 +255,21 @@ async def direct_download(request: web.Request):
                         setattr(file_id_obj, "mime_type", media.mime_type)
                         mime_type = media.mime_type
             except Exception as tg_error:
-                logging.warning(f"Failed to get file info from Telegram: {tg_error}")
+                error_str = str(tg_error)
+                logging.warning(f"Failed to get file info from Telegram: {error_str}")
+                
+                # Check for specific Telegram errors
+                if "FILE_REFERENCE" in error_str and "EXPIRED" in error_str:
+                    error_page = get_error_page("File Reference Expired", "Link Expired")
+                    return web.Response(text=error_page, content_type="text/html", status=410)
+                elif "FLOOD_WAIT" in error_str:
+                    error_page = get_error_page("Rate Limit Exceeded", "Too Many Requests")
+                    return web.Response(text=error_page, content_type="text/html", status=429)
+                elif "FILE_ID_INVALID" in error_str or "FILE_REFERENCE_INVALID" in error_str:
+                    error_page = get_error_page("Invalid File Reference", "Link Expired")
+                    return web.Response(text=error_page, content_type="text/html", status=410)
+                
+                # For other errors, use default size
                 file_size = 1024 * 1024 * 1024  # 1GB default
                 setattr(file_id_obj, "file_size", file_size)
         
@@ -241,9 +284,11 @@ async def direct_download(request: web.Request):
             until_bytes = (request.http_range.stop or file_size) - 1
         
         if (until_bytes > file_size) or (from_bytes < 0) or (until_bytes < from_bytes):
+            error_page = get_error_page("Range Not Satisfiable", "Invalid Request Range")
             return web.Response(
+                text=error_page,
+                content_type="text/html",
                 status=416,
-                body="416: Range not satisfiable",
                 headers={"Content-Range": f"bytes */{file_size}"},
             )
         
@@ -285,11 +330,36 @@ async def direct_download(request: web.Request):
         )
         
     except Exception as e:
-        logging.error(f"Error in direct_download: {e}", exc_info=True)
-        raise web.HTTPInternalServerError(
-            text='<html><body><h1>Failed to Stream File</h1></body></html>',
-            content_type="text/html"
-        )
+        error_str = str(e)
+        logging.error(f"Error in direct_download: {error_str}", exc_info=True)
+        
+        # Handle specific Telegram errors with styled pages
+        try:
+            # Check for pyrogram errors
+            if hasattr(e, '__class__') and hasattr(e.__class__, '__name__'):
+                error_class = e.__class__.__name__
+                
+                if "FileReferenceExpired" in error_class or "FILE_REFERENCE" in error_str:
+                    error_page = get_error_page("File Reference Expired", "Link Expired")
+                    return web.Response(text=error_page, content_type="text/html", status=410)
+                elif "FloodWait" in error_class or "FLOOD_WAIT" in error_str:
+                    error_page = get_error_page("Rate Limit Exceeded", "Too Many Requests")
+                    return web.Response(text=error_page, content_type="text/html", status=429)
+                elif "FileIdInvalid" in error_class or "FILE_ID_INVALID" in error_str:
+                    error_page = get_error_page("Invalid File ID", "Link Expired")
+                    return web.Response(text=error_page, content_type="text/html", status=410)
+                elif "ChannelPrivate" in error_class or "CHANNEL_PRIVATE" in error_str:
+                    error_page = get_error_page("Access Denied", "File Not Available")
+                    return web.Response(text=error_page, content_type="text/html", status=403)
+                elif "MessageIdInvalid" in error_class or "MESSAGE_ID_INVALID" in error_str:
+                    error_page = get_error_page("Message Not Found", "Link Expired")
+                    return web.Response(text=error_page, content_type="text/html", status=410)
+        except:
+            pass
+        
+        # Generic error page for other exceptions
+        error_page = get_error_page("Service Error", "Failed to Stream File")
+        return web.Response(text=error_page, content_type="text/html", status=500)
 
 class_cache = {}
 
