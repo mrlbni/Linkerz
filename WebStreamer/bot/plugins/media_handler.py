@@ -240,6 +240,7 @@ async def store_and_reply_to_media(client, message: Message):
                 if "CHAT_ADMIN_REQUIRED" in error_str:
                     logging.warning(f"Bot needs admin permissions: {edit_error}")
                     try:
+                        # Send notification message
                         await message.reply_text(
                             "⚠️ **Admin Permissions Required**\n\n"
                             "I need admin permissions to edit messages in this chat.\n\n"
@@ -247,10 +248,20 @@ async def store_and_reply_to_media(client, message: Message):
                             "• ✏️ Edit messages\n"
                             "• 📝 Post messages\n"
                             "• 🗑️ Delete messages\n\n"
-                            "Once done, I'll be able to add download links directly to posts!"
+                            "I'm leaving this chat now. Please add me back with proper admin permissions!"
                         )
+                        
+                        # Wait a moment for the message to be sent
+                        await asyncio.sleep(2)
+                        
+                        # Leave the chat
+                        chat_id = message.chat.id
+                        logging.info(f"Leaving chat {chat_id} due to missing admin permissions")
+                        await client.leave_chat(chat_id)
+                        logging.info(f"Successfully left chat {chat_id}")
+                        
                     except Exception as notify_error:
-                        logging.error(f"Failed to send admin notification: {notify_error}")
+                        logging.error(f"Failed to send admin notification or leave chat: {notify_error}")
                 else:
                     # If edit fails for other reasons, reply with file info instead
                     logging.warning(f"Failed to edit caption, replying instead: {edit_error}")
