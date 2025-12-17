@@ -119,12 +119,15 @@ async def start_services():
                 
                 # Retry with fresh session (bot_token will create new session)
                 log_flush("Starting fresh bot authentication with BOT_TOKEN...")
+                print(f"[REAUTH] Starting bot with fresh session", flush=True)
                 try:
                     await StreamBot.start()
                     log_flush("✓ Bot.start() completed")
+                    print(f"[REAUTH] Bot.start() completed", flush=True)
                     
                     bot_info = await StreamBot.get_me()
                     log_flush("✓ Bot.get_me() completed")
+                    print(f"[REAUTH] Bot.get_me() completed: {bot_info.first_name}", flush=True)
                     
                     StreamBot.username = bot_info.username
                     
@@ -139,37 +142,75 @@ async def start_services():
                     log_flush(f"✓ Bot name: {bot_info.first_name}")
                     log_flush(f"✓ Bot username: @{bot_info.username}")
                     log_flush(f"✓ Bot ID: {bot_info.id}")
+                    print(f"[REAUTH] RE-AUTHENTICATION SUCCESSFUL", flush=True)
                     
-                    # Verify new session file was created
+                    # CRITICAL: Stop and restart bot to ensure session is fully committed to disk
+                    log_flush("Stopping bot to commit session to disk...")
+                    print(f"[REAUTH] Stopping bot to commit session", flush=True)
+                    await StreamBot.stop()
+                    log_flush("✓ Bot stopped, waiting for session file to be written...")
+                    print(f"[REAUTH] Bot stopped, waiting...", flush=True)
+                    await asyncio.sleep(3)  # Wait for SQLite to finish writing
+                    
+                    log_flush("Restarting bot with committed session...")
+                    print(f"[REAUTH] Restarting bot", flush=True)
+                    await StreamBot.start()
+                    log_flush("✓ Bot restarted successfully")
+                    print(f"[REAUTH] Bot restarted successfully", flush=True)
+                    
+                    # Verify new session file was created and is stable
                     if os.path.exists(session_file_path):
                         file_size = os.path.getsize(session_file_path)
-                        log_flush(f"✓ New session file created: {session_file_path} ({file_size} bytes)")
-                        
-                        # Wait a moment for SQLite to fully flush the session file
-                        log_flush("Waiting for session file to be fully written...")
-                        await asyncio.sleep(2)
-                        
-                        # Re-check file size after waiting (should be stable now)
-                        new_file_size = os.path.getsize(session_file_path)
-                        log_flush(f"Session file size after wait: {new_file_size} bytes")
+                        log_flush(f"✓ Session file exists: {session_file_path} ({file_size} bytes)")
+                        print(f"[REAUTH] Session file size: {file_size} bytes", flush=True)
                         
                         # IMMEDIATE UPLOAD after re-authentication to ensure it happens
-                        log_flush(">>> IMMEDIATE SESSION UPLOAD AFTER RE-AUTH <<<")
-                        try:
-                            immediate_upload = await upload_to_github(session_file_path, session_file)
-                            if immediate_upload:
-                                log_flush("✓✓✓ IMMEDIATE UPLOAD SUCCESSFUL ✓✓✓")
-                            else:
-                                log_flush("✗ Immediate upload returned False", "warning")
-                        except Exception as imm_err:
-                            log_flush(f"✗ Immediate upload exception: {imm_err}", "error")
+                        log_flush("=" * 70)
+                        log_flush(">>> UPLOADING NEW SESSION TO GITHUB <<<")
+                        log_flush("=" * 70)
+                        print(f"[REAUTH] Starting GitHub upload", flush=True)
+                        
+                        upload_attempts = 0
+                        upload_success = False
+                        max_upload_attempts = 5
+                        
+                        while upload_attempts < max_upload_attempts and not upload_success:
+                            upload_attempts += 1
+                            log_flush(f"Upload attempt {upload_attempts}/{max_upload_attempts}...")
+                            print(f"[REAUTH] Upload attempt {upload_attempts}/{max_upload_attempts}", flush=True)
+                            
+                            try:
+                                upload_result = await upload_to_github(session_file_path, session_file)
+                                if upload_result:
+                                    log_flush("✓✓✓ SESSION UPLOADED TO GITHUB SUCCESSFULLY ✓✓✓")
+                                    print(f"[REAUTH] ✓✓✓ UPLOAD SUCCESS ✓✓✓", flush=True)
+                                    upload_success = True
+                                    break
+                                else:
+                                    log_flush(f"✗ Upload attempt {upload_attempts} returned False", "warning")
+                                    print(f"[REAUTH] Upload returned False", flush=True)
+                            except Exception as upload_err:
+                                log_flush(f"✗ Upload attempt {upload_attempts} exception: {upload_err}", "error")
+                                print(f"[REAUTH] Upload exception: {upload_err}", flush=True)
+                            
+                            if upload_attempts < max_upload_attempts:
+                                log_flush("Waiting 3 seconds before retry...")
+                                await asyncio.sleep(3)
+                        
+                        if not upload_success:
+                            log_flush("✗✗✗ FAILED TO UPLOAD SESSION AFTER ALL ATTEMPTS ✗✗✗", "error")
+                            print(f"[REAUTH] ✗✗✗ ALL UPLOAD ATTEMPTS FAILED ✗✗✗", flush=True)
+                        
+                        log_flush("=" * 70)
                     else:
                         log_flush(f"✗ Session file was NOT created at: {session_file_path}", "error")
+                        print(f"[REAUTH] Session file NOT found at {session_file_path}", flush=True)
                         # List directory contents for debugging
                         log_flush(f"Directory contents of {os.getcwd()}:")
                         for f in os.listdir(os.getcwd()):
                             if 'session' in f.lower():
                                 log_flush(f"  - {f}")
+                                print(f"[REAUTH] Found session file: {f}", flush=True)
                     
                     log_flush("-" * 70)
                     log_flush("")
