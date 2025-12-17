@@ -41,21 +41,65 @@ async def start_services():
 
         logging.info("")
         logging.info("-------------------- Initializing Telegram Bot --------------------")
-        await StreamBot.start()
-        bot_info = await StreamBot.get_me()
-        StreamBot.username = bot_info.username
         
-        # Cache bot info for later use (avoids repeated API calls)
-        cached_bot_info["username"] = bot_info.username
-        cached_bot_info["first_name"] = bot_info.first_name
-        cached_bot_info["id"] = bot_info.id
-        
-        logging.info("------------------------------ DONE ------------------------------")
-        logging.info("")
+        # Try to start the bot with existing session
+        session_retry = False
+        try:
+            await StreamBot.start()
+            bot_info = await StreamBot.get_me()
+            StreamBot.username = bot_info.username
+            
+            # Cache bot info for later use (avoids repeated API calls)
+            cached_bot_info["username"] = bot_info.username
+            cached_bot_info["first_name"] = bot_info.first_name
+            cached_bot_info["id"] = bot_info.id
+            
+            logging.info("------------------------------ DONE ------------------------------")
+            logging.info("")
+        except Exception as session_error:
+            error_str = str(session_error).lower()
+            
+            # Check if it's a session-related error
+            if any(err in error_str for err in ["no such table", "session", "auth", "database is locked", "database disk image is malformed"]):
+                logging.warning(f"Session error detected: {session_error}")
+                logging.info("-------------------- Re-authenticating with Bot Token --------------------")
+                
+                # Delete corrupted session file
+                session_file_path = os.path.join(os.getcwd(), session_file)
+                if os.path.exists(session_file_path):
+                    os.remove(session_file_path)
+                    logging.info(f"Deleted corrupted session file: {session_file_path}")
+                
+                # Retry with fresh session (bot_token will create new session)
+                try:
+                    await StreamBot.start()
+                    bot_info = await StreamBot.get_me()
+                    StreamBot.username = bot_info.username
+                    
+                    # Cache bot info for later use
+                    cached_bot_info["username"] = bot_info.username
+                    cached_bot_info["first_name"] = bot_info.first_name
+                    cached_bot_info["id"] = bot_info.id
+                    
+                    session_retry = True
+                    logging.info("Successfully re-authenticated with Bot Token")
+                    logging.info("------------------------------ DONE ------------------------------")
+                    logging.info("")
+                except Exception as retry_error:
+                    logging.error(f"Failed to re-authenticate: {retry_error}")
+                    raise
+            else:
+                # Not a session error, re-raise
+                raise
 
         # Upload session file to GitHub after starting the bot
         logging.info("-------------------- Uploading Session File --------------------")
-        await upload_to_github(session_file, session_file)
+        upload_success = await upload_to_github(session_file, session_file)
+        
+        if session_retry and upload_success:
+            logging.info("New session file uploaded to GitHub successfully")
+        elif session_retry and not upload_success:
+            logging.warning("Failed to upload new session to GitHub - manual backup recommended")
 
         logging.info("---------------------- Initializing Clients ----------------------")
         await initialize_clients()
