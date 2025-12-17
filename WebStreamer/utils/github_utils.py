@@ -28,13 +28,27 @@ async def upload_to_github(file_path: str, repo_path: str) -> bool:
         True if successful, False otherwise
     """
     try:
+        logging.info(f"[GitHub Upload] Starting upload process...")
+        logging.info(f"[GitHub Upload] Local file path: {file_path}")
+        logging.info(f"[GitHub Upload] GitHub repo path: {repo_path}")
+        
         if not os.path.exists(file_path):
-            logging.warning(f"File {file_path} does not exist, skipping upload")
+            logging.warning(f"[GitHub Upload] ✗ File {file_path} does not exist, skipping upload")
             return False
         
+        file_size = os.path.getsize(file_path)
+        logging.info(f"[GitHub Upload] File size: {file_size} bytes")
+        
         if not GITHUB_TOKEN or not GITHUB_USERNAME or not GITHUB_REPO:
-            logging.warning("GitHub credentials not configured, skipping upload")
+            logging.warning(f"[GitHub Upload] ✗ GitHub credentials not configured:")
+            logging.warning(f"[GitHub Upload]   - GITHUB_TOKEN: {'SET' if GITHUB_TOKEN else 'NOT SET'}")
+            logging.warning(f"[GitHub Upload]   - GITHUB_USERNAME: {GITHUB_USERNAME if GITHUB_USERNAME else 'NOT SET'}")
+            logging.warning(f"[GitHub Upload]   - GITHUB_REPO: {GITHUB_REPO if GITHUB_REPO else 'NOT SET'}")
+            logging.warning(f"[GitHub Upload] Skipping upload")
             return False
+        
+        logging.info(f"[GitHub Upload] ✓ GitHub credentials configured")
+        logging.info(f"[GitHub Upload] Target repo: {GITHUB_USERNAME}/{GITHUB_REPO}")
         
         # Construct the API URL for the file in the repository
         url = f"{GITHUB_API_URL}/repos/{GITHUB_USERNAME}/{GITHUB_REPO}/contents/{repo_path}"
