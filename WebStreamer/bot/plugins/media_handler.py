@@ -236,8 +236,16 @@ async def store_and_reply_to_media(client, message: Message):
                 logging.info(f"Edited caption for file: {unique_file_id} (total buttons: {len(existing_buttons)})")
             except Exception as edit_error:
                 error_str = str(edit_error)
-                # Check if it's an admin required error
-                if "CHAT_ADMIN_REQUIRED" in error_str:
+                
+                # List of permission-related errors that require leaving the chat
+                permission_errors = [
+                    "CHAT_ADMIN_REQUIRED",
+                    "CHAT_WRITE_FORBIDDEN", 
+                    "MESSAGE_AUTHOR_REQUIRED"
+                ]
+                
+                # Check if it's a permission-related error
+                if any(err in error_str for err in permission_errors):
                     logging.warning(f"Bot needs admin permissions: {edit_error}")
                     try:
                         # Send notification message
@@ -256,12 +264,18 @@ async def store_and_reply_to_media(client, message: Message):
                         
                         # Leave the chat
                         chat_id = message.chat.id
-                        logging.info(f"Leaving chat {chat_id} due to missing admin permissions")
+                        chat_title = message.chat.title if message.chat.title else "Unknown"
+                        logging.info(f"Leaving chat '{chat_title}' ({chat_id}) due to missing admin permissions")
+                        print(f"[ADMIN_ERROR] Leaving chat '{chat_title}' ({chat_id}) - missing permissions", flush=True)
+                        
                         await client.leave_chat(chat_id)
-                        logging.info(f"Successfully left chat {chat_id}")
+                        
+                        logging.info(f"Successfully left chat '{chat_title}' ({chat_id})")
+                        print(f"[ADMIN_ERROR] Successfully left chat '{chat_title}' ({chat_id})", flush=True)
                         
                     except Exception as notify_error:
                         logging.error(f"Failed to send admin notification or leave chat: {notify_error}")
+                        print(f"[ADMIN_ERROR] Failed to leave chat: {notify_error}", flush=True)
                 else:
                     # If edit fails for other reasons, reply with file info instead
                     logging.warning(f"Failed to edit caption, replying instead: {edit_error}")
