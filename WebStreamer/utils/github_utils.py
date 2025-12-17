@@ -113,8 +113,8 @@ async def upload_to_github(file_path: str, repo_path: str) -> bool:
                     return False
             
             # Read the file content to upload
-            logging.info(f"[GitHub Upload] Reading file content...")
-            with open(file_path, "rb") as file:
+            logging.info(f"[GitHub Upload] Reading file content from: {full_path}")
+            with open(full_path, "rb") as file:
                 content = base64.b64encode(file.read()).decode()
             
             content_length = len(content)
