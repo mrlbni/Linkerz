@@ -145,6 +145,14 @@ async def start_services():
                         file_size = os.path.getsize(session_file_path)
                         log_flush(f"✓ New session file created: {session_file_path} ({file_size} bytes)")
                         
+                        # Wait a moment for SQLite to fully flush the session file
+                        log_flush("Waiting for session file to be fully written...")
+                        await asyncio.sleep(2)
+                        
+                        # Re-check file size after waiting (should be stable now)
+                        new_file_size = os.path.getsize(session_file_path)
+                        log_flush(f"Session file size after wait: {new_file_size} bytes")
+                        
                         # IMMEDIATE UPLOAD after re-authentication to ensure it happens
                         log_flush(">>> IMMEDIATE SESSION UPLOAD AFTER RE-AUTH <<<")
                         try:
