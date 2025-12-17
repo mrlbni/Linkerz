@@ -243,45 +243,44 @@ async def start_services():
         log_flush("=" * 70)
         
         if session_retry:
-            log_flush("! This is a NEW session (re-authenticated), uploading to GitHub...")
+            log_flush("! Session was re-authenticated, upload already completed in STEP 2B")
+            log_flush("! Skipping duplicate upload")
+            print(f"[UPLOAD] Skipping STEP 3 upload (already done in STEP 2B)", flush=True)
         else:
             log_flush("! This is an EXISTING session, updating GitHub backup...")
-        
-        log_flush(f"Session file to upload: {session_file}")
-        log_flush(f"Session file path: {session_file_path}")
-        log_flush(f"Session file exists: {os.path.exists(session_file_path)}")
-        
-        if os.path.exists(session_file_path):
-            file_size = os.path.getsize(session_file_path)
-            log_flush(f"Session file size: {file_size} bytes")
+            print(f"[UPLOAD] Starting STEP 3 upload for existing session", flush=True)
             
-            # Upload with retry logic (use full path for reliability)
-            upload_success = False
-            max_retries = 3
-            for attempt in range(1, max_retries + 1):
-                log_flush(f"GitHub upload attempt {attempt}/{max_retries}...")
-                try:
-                    upload_success = await upload_to_github(session_file_path, session_file)
-                    if upload_success:
-                        log_flush(f"✓✓✓ SESSION FILE UPLOADED TO GITHUB SUCCESSFULLY (attempt {attempt}) ✓✓✓")
-                        if session_retry:
-                            log_flush("✓ NEW session is now backed up to GitHub")
-                        break
-                    else:
-                        log_flush(f"✗ Upload attempt {attempt} returned False", "warning")
-                except Exception as upload_err:
-                    log_flush(f"✗ Upload attempt {attempt} failed: {upload_err}", "error")
+            log_flush(f"Session file to upload: {session_file}")
+            log_flush(f"Session file path: {session_file_path}")
+            log_flush(f"Session file exists: {os.path.exists(session_file_path)}")
+            
+            if os.path.exists(session_file_path):
+                file_size = os.path.getsize(session_file_path)
+                log_flush(f"Session file size: {file_size} bytes")
                 
-                if attempt < max_retries:
-                    log_flush(f"Waiting 2 seconds before retry...")
-                    await asyncio.sleep(2)
-            
-            if not upload_success:
-                log_flush("✗✗✗ GITHUB UPLOAD FAILED AFTER ALL RETRIES ✗✗✗", "error")
-                if session_retry:
-                    log_flush("✗ NEW session was NOT backed up - manual backup recommended!", "warning")
-        else:
-            log_flush(f"✗ Session file not found at {session_file_path}, cannot upload", "error")
+                # Upload with retry logic (use full path for reliability)
+                upload_success = False
+                max_retries = 3
+                for attempt in range(1, max_retries + 1):
+                    log_flush(f"GitHub upload attempt {attempt}/{max_retries}...")
+                    try:
+                        upload_success = await upload_to_github(session_file_path, session_file)
+                        if upload_success:
+                            log_flush(f"✓✓✓ SESSION FILE UPLOADED TO GITHUB SUCCESSFULLY (attempt {attempt}) ✓✓✓")
+                            break
+                        else:
+                            log_flush(f"✗ Upload attempt {attempt} returned False", "warning")
+                    except Exception as upload_err:
+                        log_flush(f"✗ Upload attempt {attempt} failed: {upload_err}", "error")
+                    
+                    if attempt < max_retries:
+                        log_flush(f"Waiting 2 seconds before retry...")
+                        await asyncio.sleep(2)
+                
+                if not upload_success:
+                    log_flush("✗✗✗ GITHUB UPLOAD FAILED AFTER ALL RETRIES ✗✗✗", "error")
+            else:
+                log_flush(f"✗ Session file not found at {session_file_path}, cannot upload", "error")
         
         log_flush("-" * 70)
         log_flush("")
