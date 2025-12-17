@@ -50,7 +50,6 @@ async def initialize_clients():
             await asyncio.sleep(1)
             
             # Upload session file to GitHub (use full path for reliability)
-            import os
             session_file_path = os.path.join(os.getcwd(), session_file)
             logging.info(f"Uploading session file: {session_file_path}")
             await upload_to_github(session_file_path, session_file)
