@@ -141,12 +141,20 @@ async def download_from_github(repo_path: str, local_path: Optional[str] = None)
         True if successful, False otherwise
     """
     try:
-        logging.info(f"Downloading {repo_path} from GitHub")
-        logging.debug(f"Current directory: {os.getcwd()}")
+        logging.info(f"[GitHub Download] Starting download process...")
+        logging.info(f"[GitHub Download] GitHub repo path: {repo_path}")
+        logging.info(f"[GitHub Download] Current directory: {os.getcwd()}")
         
         if not GITHUB_TOKEN or not GITHUB_USERNAME or not GITHUB_REPO:
-            logging.warning("GitHub credentials not configured, skipping download")
+            logging.warning(f"[GitHub Download] ✗ GitHub credentials not configured:")
+            logging.warning(f"[GitHub Download]   - GITHUB_TOKEN: {'SET' if GITHUB_TOKEN else 'NOT SET'}")
+            logging.warning(f"[GitHub Download]   - GITHUB_USERNAME: {GITHUB_USERNAME if GITHUB_USERNAME else 'NOT SET'}")
+            logging.warning(f"[GitHub Download]   - GITHUB_REPO: {GITHUB_REPO if GITHUB_REPO else 'NOT SET'}")
+            logging.warning(f"[GitHub Download] Skipping download")
             return False
+        
+        logging.info(f"[GitHub Download] ✓ GitHub credentials configured")
+        logging.info(f"[GitHub Download] Target repo: {GITHUB_USERNAME}/{GITHUB_REPO}")
         
         url = f"{GITHUB_API_URL}/repos/{GITHUB_USERNAME}/{GITHUB_REPO}/contents/{repo_path}"
         headers = {
