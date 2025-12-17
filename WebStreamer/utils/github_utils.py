@@ -52,32 +52,45 @@ async def upload_to_github(file_path: str, repo_path: str) -> bool:
         
         # Construct the API URL for the file in the repository
         url = f"{GITHUB_API_URL}/repos/{GITHUB_USERNAME}/{GITHUB_REPO}/contents/{repo_path}"
+        logging.info(f"[GitHub Upload] API URL: {url}")
+        
         headers = {
-            "Authorization": f"token {GITHUB_TOKEN}",
+            "Authorization": f"token {GITHUB_TOKEN[:10]}...",  # Only log first 10 chars
             "Accept": "application/vnd.github.v3+json"
         }
         
         async with aiohttp.ClientSession() as session:
             # Check if file exists
-            async with session.get(url, headers=headers) as response:
+            logging.info(f"[GitHub Upload] Checking if file exists on GitHub...")
+            async with session.get(url, headers={"Authorization": f"token {GITHUB_TOKEN}", "Accept": "application/vnd.github.v3+json"}) as response:
                 if response.status == 200:
                     # File exists, extract current content details
-                    logging.info(f"File Found: {repo_path}")
+                    logging.info(f"[GitHub Upload] ✓ File exists on GitHub: {repo_path}")
                     current_content = await response.json()
                     sha = current_content.get('sha', '')
-                    logging.debug(f"SHA: {sha}")
+                    logging.info(f"[GitHub Upload] Current SHA: {sha[:10]}...")
                 elif response.status == 404:
                     # File does not exist, initialize sha as empty string
-                    logging.info(f"File Not Found: {repo_path}")
+                    logging.info(f"[GitHub Upload] ! File does not exist on GitHub (will create new): {repo_path}")
                     sha = ''
                 else:
                     # Handle other response codes
-                    logging.error(f"Failed to check {repo_path} on GitHub. Status code: {response.status}")
+                    logging.error(f"[GitHub Upload] ✗ Failed to check file on GitHub")
+                    logging.error(f"[GitHub Upload] Status code: {response.status}")
+                    try:
+                        error_body = await response.text()
+                        logging.error(f"[GitHub Upload] Response: {error_body[:200]}")
+                    except:
+                        pass
                     return False
             
             # Read the file content to upload
+            logging.info(f"[GitHub Upload] Reading file content...")
             with open(file_path, "rb") as file:
                 content = base64.b64encode(file.read()).decode()
+            
+            content_length = len(content)
+            logging.info(f"[GitHub Upload] Encoded content length: {content_length} chars")
             
             # Prepare data for updating or creating the file
             data = {
@@ -88,19 +101,31 @@ async def upload_to_github(file_path: str, repo_path: str) -> bool:
 
             if sha:
                 data["sha"] = sha
+                logging.info(f"[GitHub Upload] Mode: UPDATE (with SHA)")
+            else:
+                logging.info(f"[GitHub Upload] Mode: CREATE (no SHA)")
             
             # Send PUT request to update/create the file
-            logging.info(f"Uploading {file_path} to GitHub")
-            async with session.put(url, json=data, headers=headers) as response:
+            logging.info(f"[GitHub Upload] Sending PUT request to GitHub...")
+            async with session.put(url, json=data, headers={"Authorization": f"token {GITHUB_TOKEN}", "Accept": "application/vnd.github.v3+json"}) as response:
                 if response.status in (200, 201):
-                    logging.info(f"Updated {repo_path} on GitHub")
+                    logging.info(f"[GitHub Upload] ✓✓✓ SUCCESS! File uploaded to GitHub")
+                    logging.info(f"[GitHub Upload] Status code: {response.status}")
                     return True
                 else:
-                    logging.error(f"Failed to update {repo_path} on GitHub. Status code: {response.status}")
+                    logging.error(f"[GitHub Upload] ✗✗✗ FAILED to upload to GitHub")
+                    logging.error(f"[GitHub Upload] Status code: {response.status}")
+                    try:
+                        error_body = await response.text()
+                        logging.error(f"[GitHub Upload] Response: {error_body[:500]}")
+                    except:
+                        pass
                     return False
     
     except Exception as e:
-        logging.error(f"Failed to upload {file_path} to GitHub: {e}")
+        logging.error(f"[GitHub Upload] ✗✗✗ EXCEPTION during upload: {e}")
+        import traceback
+        logging.error(f"[GitHub Upload] Traceback: {traceback.format_exc()}")
         return False
 
 
